@@ -48,6 +48,25 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@22.20.5)(tsx@4.23.15)
 
+  apps/premiere-plugin:
+    dependencies:
+      '@motionhub/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+    devDependencies:
+      '@adobe/premierepro':
+        specifier: 26.5.1
+        version: 26.5.1
+      esbuild:
+        specifier: ^0.28.0
+        version: 0.28.2
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.20.5)(tsx@4.23.15)
+
   packages/shared:
     dependencies:
       zod:
@@ -62,6 +81,10 @@ importers:
         version: 3.2.7(@types/node@22.20.5)(tsx@4.23.15)
 
 packages:
+
+  '@adobe/premierepro@26.5.1':
+    resolution: {integrity: sha512-rNnePE5VZnEc8n2gUPE/m9jd1h4zhrxeD3tIEc156lI5/S59EG0AwrwixCuS4UxmoFq6HGwaWb8AIJLyAxs4UA==}
+    engines: {node: '>=20.0.0'}
 
   '@esbuild/aix-ppc64@0.28.2':
     resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
@@ -864,6 +887,8 @@ packages:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
+
+  '@adobe/premierepro@26.5.1': {}
 
   '@esbuild/aix-ppc64@0.28.2':
     optional: true

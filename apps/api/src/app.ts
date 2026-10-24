@@ -43,7 +43,11 @@ export async function buildApp(ctx: AppContext, opts: { logger?: boolean } = {})
     trustProxy: true,
   });
 
-  await app.register(cors, { origin: ctx.config.corsOrigins.length ? ctx.config.corsOrigins : false });
+  await app.register(cors, {
+    origin: ctx.config.corsOrigins.length ? ctx.config.corsOrigins : false,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
+    exposedHeaders: ["X-Correlation-Id", "ETag"],
+  });
 
   const limiter = authLimiter(ctx.config.authRateLimitPerMin);
   app.addHook("onRequest", async (req, reply) => {

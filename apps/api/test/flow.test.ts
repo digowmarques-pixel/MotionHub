@@ -189,6 +189,14 @@ describe("fluxo rascunho → revisão → publicado", () => {
   });
 });
 
+describe("CORS", () => {
+  it("preflight libera PUT/DELETE para origens configuradas", async () => {
+    const r = await env.app.inject({ method: "OPTIONS", url: "/v1/favourites/x", headers: { origin: "http://localhost:5173", "access-control-request-method": "PUT" } });
+    expect(r.headers["access-control-allow-methods"]).toContain("PUT");
+    expect(r.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
+  });
+});
+
 describe("diagnóstico e administração", () => {
   it("exige consentimento e mascara caminhos pessoais", async () => {
     const no = await env.app.inject({ method: "POST", url: "/v1/diagnostics", headers: bearer(tok.editor!), payload: { payload: { a: 1 } } });

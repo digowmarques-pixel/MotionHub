@@ -6,3 +6,4 @@ coverage/
 storage/
 *.tsbuildinfo
 keys/
+dev-dist/

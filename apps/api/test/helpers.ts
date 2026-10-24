@@ -32,6 +32,7 @@ export async function setup(): Promise<TestEnv> {
     storageDir: join(dir, "storage"),
     publicUrl: "http://test.local",
     authRateLimitPerMin: 10_000,
+    corsOrigins: ["http://localhost:5173"],
     packSigningKeyPem: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
   });
   await ctx.db.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");

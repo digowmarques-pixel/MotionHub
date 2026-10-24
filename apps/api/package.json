@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "migrate": "tsx src/cli/migrate.ts",
     "seed": "tsx src/cli/seed.ts",
+    "seed-demo": "tsx src/cli/seed-demo.ts",
     "worker": "tsx src/cli/worker.ts",
     "keygen": "tsx src/cli/keygen.ts",
     "test": "vitest run"

@@ -89,6 +89,7 @@ export function toAssetDTO(ctx: AppContext, a: AssetRow): AssetDTO {
     creatorId: a.creator_id,
     state: a.state,
     latestVersion: a.latest_semver ?? null,
+    currentVersionId: a.current_version_id,
     posterUrl: a.poster_key ? signedFileUrl(ctx, a.poster_key, MEDIA_URL_TTL).url : null,
     previewUrl: a.preview_key ? signedFileUrl(ctx, a.preview_key, MEDIA_URL_TTL).url : null,
     durationSec: a.duration_sec ?? null,

@@ -59,6 +59,7 @@ export interface AssetDTO {
   creatorId: string;
   state: AssetState;
   latestVersion: string | null;
+  currentVersionId: string | null;
   posterUrl: string | null;
   previewUrl: string | null;
   durationSec: number | null;

@@ -1,0 +1,22 @@
+{
+  "name": "@motionhub/premiere-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "dev": "node scripts/build.mjs --dev --serve",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@motionhub/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@adobe/premierepro": "26.5.1",
+    "esbuild": "^0.28.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

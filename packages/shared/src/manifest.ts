@@ -22,6 +22,8 @@ const base = {
   label: z.string().min(1).max(80).optional(),
   tooltip: z.string().max(240).optional(),
   group: z.string().max(40).optional(),
+  /** Nome do controle no host (ex.: nome do parâmetro do MOGRT no Essential Graphics). Padrão: label, depois key. */
+  hostParam: z.string().max(120).optional(),
 };
 
 export const EASINGS = [
