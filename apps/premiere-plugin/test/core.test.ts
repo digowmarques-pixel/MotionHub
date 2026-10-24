@@ -128,6 +128,33 @@ describe("aplicar asset (§7.1, casos BDD §14)", () => {
     expect(r.message).toMatch(/Cor principal/);
   });
 
+  it("usa pacote instalado pelo Gerenciador, sem rede e sem baixar", async () => {
+    platform.libraryIndex = JSON.stringify({
+      schema: 1,
+      packs: {
+        piloto: {
+          current: "1.0.0",
+          versions: { "1.0.0": { assets: [{ assetId: "a1", version: "1.2.0", files: [{ path: "meg-title-rise-001/1.2.0/template/title.mogrt", role: "template", sha256: "x", absPath: "C:\\Users\\editor\\AppData\\Roaming\\Megalume Motion Hub\\Library\\packs\\piloto\\1.0.0\\title.mogrt" }] }] } },
+        },
+      },
+    });
+    await cache.loadLibrary();
+    expect(cache.libraryConnected).toBe(true);
+    expect(cache.isInstalled("a1", "1.2.0")).toBe(true);
+    server.online = false;
+    server.calls = [];
+    const r = await applyAsset({ item: catalog.get("a1")!, values: {}, options: opts }, deps());
+    expect(r.op.state).toBe("completed");
+    expect(server.calls).toEqual([]);
+    expect(host.insertions[0]!.path).toMatch(/Library\\packs\\piloto/);
+  });
+
+  it("ignora pacote revogado na biblioteca do Gerenciador", async () => {
+    platform.libraryIndex = JSON.stringify({ schema: 1, packs: { piloto: { current: "1.0.0", revoked: true, versions: { "1.0.0": { assets: [{ assetId: "a1", version: "1.2.0", files: [{ path: "x/y/t.mogrt", role: "template", sha256: "x", absPath: "/lib/t.mogrt" }] }] } } } } });
+    await cache.loadLibrary();
+    expect(cache.isInstalled("a1", "1.2.0")).toBe(false);
+  });
+
   it("download verificado grava o arquivo íntegro", async () => {
     await applyAsset({ item: catalog.get("a1")!, values: {}, options: opts }, deps());
     const stored = platform.files.get("assets/meg-title-rise-001/1.2.0/template/title.mogrt") as Uint8Array;

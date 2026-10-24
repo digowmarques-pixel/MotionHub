@@ -18,7 +18,8 @@ export interface PutResult {
 export interface StorageDriver {
   /** Grava de forma atômica (arquivo temporário + rename), calculando sha256 e tamanho. */
   put(key: string, body: Readable, opts?: { maxBytes?: number }): Promise<PutResult>;
-  get(key: string): Readable;
+  get(key: string, range?: { start: number; end: number }): Readable;
+  size(key: string): Promise<number | null>;
   exists(key: string): Promise<boolean>;
   remove(key: string): Promise<void>;
   /** Caminho local, quando o driver for de disco (usado pelo worker de previews). */
@@ -60,8 +61,16 @@ export class LocalStorage implements StorageDriver {
     return { key, bytes, sha256: hash.digest("hex") };
   }
 
-  get(key: string): Readable {
-    return createReadStream(this.pathFor(key));
+  get(key: string, range?: { start: number; end: number }): Readable {
+    return createReadStream(this.pathFor(key), range);
+  }
+
+  async size(key: string): Promise<number | null> {
+    try {
+      return (await stat(this.pathFor(key))).size;
+    } catch {
+      return null;
+    }
   }
 
   async exists(key: string): Promise<boolean> {

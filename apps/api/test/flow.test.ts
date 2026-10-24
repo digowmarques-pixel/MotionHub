@@ -126,6 +126,10 @@ describe("fluxo rascunho → revisão → publicado", () => {
     const dl = await env.app.inject({ method: "GET", url: url.pathname + url.search });
     expect(dl.statusCode).toBe(200);
     expect(sha256Hex(dl.rawPayload)).toBe(mogrt.sha256);
+    const part = await env.app.inject({ method: "GET", url: url.pathname + url.search, headers: { range: "bytes=10-" } });
+    expect(part.statusCode).toBe(206);
+    expect(Buffer.concat([dl.rawPayload.subarray(0, 10), part.rawPayload]).equals(dl.rawPayload)).toBe(true);
+    expect((await env.app.inject({ method: "GET", url: url.pathname + url.search, headers: { range: "bytes=999999-" } })).statusCode).toBe(416);
     const tampered = await env.app.inject({ method: "GET", url: url.pathname + url.search.replace(/sig=./, "sig=Z") });
     expect(tampered.statusCode).toBe(403);
   });
@@ -170,6 +174,8 @@ describe("fluxo rascunho → revisão → publicado", () => {
     await drainJobs();
     const list = (await env.app.inject({ method: "GET", url: "/v1/packs", headers: bearer(tok.editor!) })).json();
     expect(list.packs).toHaveLength(1);
+    expect(list.packs[0]).toMatchObject({ assetCount: 1, types: ["title"], hosts: ["premiere"] });
+    expect(list.packs[0].posterUrl).toMatch(/poster\.webp/);
     const packId = list.packs[0].id;
     const m = (await env.app.inject({ method: "GET", url: `/v1/packs/${packId}/manifest`, headers: bearer(tok.editor!) })).json();
     const key = (await env.app.inject({ method: "GET", url: "/v1/packs/signing-key" })).json();

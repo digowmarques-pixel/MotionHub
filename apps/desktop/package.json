@@ -1,0 +1,86 @@
+{
+  "name": "@motionhub/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Megalume Motion Hub \u2014 Gerenciador de pacotes",
+  "type": "module",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "node scripts/build.mjs && electron .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "dist": "node scripts/build.mjs && electron-builder"
+  },
+  "dependencies": {
+    "@motionhub/shared": "workspace:*",
+    "yauzl": "^3.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/yauzl": "^3.4.0",
+    "electron": "45.0.0",
+    "electron-builder": "^26.0.0",
+    "esbuild": "^0.28.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0",
+    "yazl": "^3.3.0",
+    "@types/yazl": "^3.3.0"
+  },
+  "build": {
+    "appId": "br.com.megalume.motionhub.manager",
+    "productName": "Megalume Motion Hub",
+    "copyright": "\u00a9 Megalume",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "dist/main.cjs",
+      "type": "commonjs"
+    },
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "MotionHub-Gerenciador-${version}-win-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "MotionHub-Gerenciador-Setup-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.video",
+      "hardenedRuntime": true,
+      "artifactName": "MotionHub-Gerenciador-${version}-${arch}.${ext}"
+    }
+  }
+}

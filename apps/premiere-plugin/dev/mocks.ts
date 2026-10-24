@@ -20,6 +20,13 @@ export class MemoryPlatform implements Platform {
       }
     }
   }
+  libraryIndex: string | null = null;
+  async connectLibrary() {
+    return this.libraryIndex ? "/mock/Library" : null;
+  }
+  async readLibraryIndex() {
+    return this.libraryIndex;
+  }
   async readText(path: string) {
     const v = this.files.get(path);
     return typeof v === "string" ? v : v ? new TextDecoder().decode(v) : null;

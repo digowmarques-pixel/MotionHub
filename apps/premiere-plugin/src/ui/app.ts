@@ -135,7 +135,11 @@ export class App {
       h("div", { class: "filters" }, aspect, sort, h("span", { id: "count", class: "count", "aria-live": "polite" })),
       grid,
       h("section", { class: "detail", id: "detail", hidden: true, "aria-label": "Detalhes do asset" }),
-      h("footer", { class: "ctx", id: "ctx" }, h("span", { class: "dot", id: "net" }), h("span", { id: "ctx-text" }, "Lendo Premiere…")),
+      h("footer", { class: "ctx", id: "ctx" },
+        h("span", { class: "dot", id: "net" }),
+        h("span", { id: "ctx-text" }, "Lendo Premiere…"),
+        h("button", { type: "button", class: "lib-btn", id: "lib", onclick: () => this.connectLibrary() }),
+      ),
     );
 
     document.onkeydown = (e) => {
@@ -146,7 +150,30 @@ export class App {
       }
     };
     this.refresh();
+    this.renderLibrary();
     this.startPolling();
+  }
+
+  private renderLibrary(): void {
+    const b = this.root.querySelector<HTMLButtonElement>("#lib");
+    if (!b) return;
+    b.textContent = this.cache.libraryConnected ? "Biblioteca ✓" : "Conectar biblioteca";
+    b.title = this.cache.libraryConnected
+      ? "Usando os pacotes instalados pelo Gerenciador Motion Hub (funciona offline). Clique para trocar a pasta."
+      : "Escolha a pasta da biblioteca do Gerenciador para usar os pacotes já instalados, sem baixar de novo.";
+  }
+
+  private async connectLibrary(): Promise<void> {
+    try {
+      const path = await this.platform.connectLibrary();
+      if (!path) return;
+      await this.cache.loadLibrary();
+      this.renderLibrary();
+      this.renderGrid();
+    } catch (e) {
+      const t = this.root.querySelector("#ctx-text");
+      if (t) t.textContent = (e as Error).message;
+    }
   }
 
   private setCategory(c: Category): void {

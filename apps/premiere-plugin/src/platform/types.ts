@@ -16,4 +16,8 @@ export interface Platform {
   secureGet(key: string): Promise<string | null>;
   secureSet(key: string, value: string | null): Promise<void>;
   fetch: typeof fetch;
+  /** Pede ao usuário a pasta da biblioteca do Gerenciador e guarda o acesso. Retorna o caminho ou null. */
+  connectLibrary(): Promise<string | null>;
+  /** Lê <biblioteca>/index.json, se uma biblioteca estiver conectada. */
+  readLibraryIndex(): Promise<string | null>;
 }

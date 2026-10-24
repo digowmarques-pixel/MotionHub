@@ -1,0 +1,80 @@
+:root { --bg: #1f1f1f; --row: #2a2a2a; --section: #1a1a1a; --line: #333; --text: #e8e8e8; --muted: #9b9b9b; --link: #4b9cf5; --ok: #4cc38a; --warn: #e6b450; --bad: #f0706a; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+[hidden] { display: none !important; }
+#app { display: flex; flex-direction: column; height: 100vh; }
+.spacer { flex: 1; }
+.muted { color: var(--muted); }
+
+.top { display: flex; align-items: center; gap: 18px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--bg); }
+.tab { background: none; border: none; padding: 4px 0; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
+.tab.active { color: var(--text); border-bottom-color: var(--text); }
+.email { color: var(--muted); }
+.net { font-size: 11px; color: var(--muted); }
+.net.on::before, .net.off::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.net.on::before { background: var(--ok); }
+.net.off::before { background: var(--warn); }
+.icon { background: none; border: 1px solid var(--line); border-radius: 50%; width: 28px; height: 28px; cursor: pointer; }
+
+.list { flex: 1; overflow-y: auto; }
+.section { margin: 0; padding: 12px 14px; font-size: 13px; font-weight: 500; background: var(--section); color: #cfcfcf; }
+.row { display: flex; align-items: center; gap: 12px; padding: 14px; background: var(--row); border-bottom: 1px solid var(--line); }
+.row.revoked { opacity: 0.7; }
+.thumb { width: 80px; height: 45px; flex: none; background: #111; display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--muted); font-weight: 700; font-size: 11px; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; }
+.info { flex: 1; min-width: 0; }
+.name { font-weight: 500; font-size: 14px; }
+.meta { color: var(--muted); font-size: 12px; }
+.status { font-size: 12px; }
+.status.ok { color: var(--ok); }
+.status.warn { color: var(--warn); }
+.status.bad { color: var(--bad); }
+
+.pill { background: #e8e8e8; color: #1b1b1b; border: none; border-radius: 12px; padding: 4px 18px; cursor: pointer; font-size: 12px; }
+.pill:disabled { opacity: 0.55; cursor: default; }
+.pill.solid { background: #f3f3f3; font-weight: 600; }
+.split-btn { display: flex; align-items: center; gap: 2px; position: relative; }
+.split-btn .main { border-radius: 12px 0 0 12px; min-width: 96px; }
+.caret { border-radius: 0 12px 12px 0; padding: 4px 8px; list-style: none; display: inline-block; }
+.caret::-webkit-details-marker { display: none; }
+.menu { position: relative; }
+.menu-items { position: absolute; right: 0; top: 28px; background: #333; border: 1px solid #444; border-radius: 6px; padding: 4px; min-width: 190px; z-index: 5; display: flex; flex-direction: column; }
+.menu-items button { background: none; border: none; text-align: left; padding: 7px 10px; cursor: pointer; border-radius: 4px; }
+.menu-items button:hover { background: #444; }
+.menu-items .muted { padding: 7px 10px; }
+.progress { width: 220px; display: flex; flex-direction: column; gap: 3px; }
+.bar { height: 6px; background: #444; border-radius: 3px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--link); transition: width 0.2s; }
+.progress small { color: var(--muted); }
+.link { background: none; border: none; color: var(--link); padding: 0; cursor: pointer; align-self: flex-start; font-size: 12px; }
+
+.bottom { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--line); }
+.bottom .pill:not(.solid) { background: none; color: var(--text); border: 1px solid #888; }
+.empty { padding: 60px 20px; text-align: center; color: var(--muted); }
+.empty strong { color: var(--text); font-size: 15px; }
+
+.toast { position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%); background: #333; border: 1px solid #555; padding: 9px 14px; border-radius: 6px; max-width: 80%; }
+.toast.ok { border-color: var(--ok); }
+.toast.error { border-color: var(--bad); }
+
+.settings { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); display: flex; justify-content: center; align-items: flex-start; padding: 40px 16px; overflow-y: auto; }
+.settings-card { background: #262626; border: 1px solid #3a3a3a; border-radius: 10px; padding: 18px 22px; width: 100%; max-width: 620px; }
+.settings-card header, .settings-card footer { display: flex; justify-content: space-between; align-items: center; }
+.settings-card footer { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
+.settings-card h2 { margin: 0; font-size: 16px; }
+.settings-card h3 { font-size: 13px; margin: 18px 0 6px; }
+.settings-card .pill { background: none; color: var(--text); border: 1px solid #777; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.path { display: block; background: #1b1b1b; padding: 7px 9px; border-radius: 5px; margin-bottom: 8px; word-break: break-all; }
+.check { display: flex; align-items: center; gap: 4px; color: var(--muted); }
+
+.login { margin: auto; width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 12px; padding: 24px; }
+.login label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); }
+.login input { background: #2b2b2b; border: 1px solid #444; border-radius: 6px; padding: 8px 10px; }
+.login .primary { background: var(--link); border: none; color: #0b1a2b; font-weight: 600; padding: 9px; border-radius: 6px; cursor: pointer; }
+.login .error { color: var(--bad); }
+.brand { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+.brand small { display: block; color: var(--muted); }
+.logo { width: 36px; height: 36px; border-radius: 8px; background: var(--link); color: #0b1a2b; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; }

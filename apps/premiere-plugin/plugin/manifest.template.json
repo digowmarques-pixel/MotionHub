@@ -26,7 +26,7 @@
     { "width": 24, "height": 24, "path": "icons/plugin.png", "scale": [1, 2], "theme": ["all"], "species": ["pluginList"] }
   ],
   "requiredPermissions": {
-    "localFileSystem": "plugin",
+    "localFileSystem": "request",
     "network": { "domains": "__NETWORK_DOMAINS__" },
     "allowCodeGenerationFromStrings": false
   }

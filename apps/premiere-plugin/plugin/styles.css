@@ -113,3 +113,4 @@ fieldset.group legend { color: var(--muted); padding: 0; margin-bottom: 4px; }
 .status.ok { color: var(--ok); }
 .status.error { color: var(--err); }
 .text-btn { flex: none; padding: 0 10px; height: 30px; color: var(--muted); }
+.lib-btn { margin-left: auto; flex: none; background: none; border: 1px solid var(--line); padding: 2px 8px; font-size: 11px; color: var(--muted); }

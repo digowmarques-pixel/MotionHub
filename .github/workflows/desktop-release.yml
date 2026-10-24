@@ -1,0 +1,53 @@
+# Gera os instaladores do Gerenciador em Windows e macOS reais.
+# Assinatura (§9, §18): configure os segredos abaixo; sem eles o build sai SEM assinatura
+# (o Windows mostra alerta do SmartScreen e o macOS bloqueia por padrão).
+#   Windows: WIN_CSC_LINK (certificado .pfx em base64), WIN_CSC_KEY_PASSWORD
+#   macOS:   MAC_CSC_LINK, MAC_CSC_KEY_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
+name: Instaladores do Gerenciador
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["desktop-v*"]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @motionhub/shared build
+      - run: pnpm --filter @motionhub/desktop test
+      - name: Build Windows
+        if: runner.os == 'Windows'
+        working-directory: apps/desktop
+        run: pnpm dist --win --publish never
+        env:
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      - name: Build macOS
+        if: runner.os == 'macOS'
+        working-directory: apps/desktop
+        run: pnpm dist --mac --publish never
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CSC_LINK != '' }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gerenciador-${{ runner.os }}
+          path: |
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.dmg

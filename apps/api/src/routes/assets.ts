@@ -142,7 +142,8 @@ export function assetRoutes(app: FastifyInstance, ctx: AppContext): void {
     const key = (req.params as { "*": string })["*"];
     const { exp, sig } = parse(z.object({ exp: z.coerce.number().int(), sig: z.string().max(100) }), req.query);
     if (!verifyUrlParams(key, exp, sig, ctx.config.jwtSecret)) throw forbidden("Link expirado ou inválido.");
-    if (!(await ctx.storage.exists(key))) throw notFound("Arquivo");
+    const size = await ctx.storage.size(key);
+    if (size === null) throw notFound("Arquivo");
     const f = (await ctx.db.query<{ mime: string; sha256: string }>(
       `SELECT mime, sha256 FROM asset_files WHERE storage_key = $1 UNION ALL SELECT 'application/zip', archive_sha256 FROM packs WHERE archive_key = $1 LIMIT 1`,
       [key],
@@ -150,6 +151,21 @@ export function assetRoutes(app: FastifyInstance, ctx: AppContext): void {
     reply.header("Content-Type", f?.mime ?? "application/octet-stream");
     if (f?.sha256) reply.header("ETag", `"${f.sha256}"`);
     reply.header("Cache-Control", "private, max-age=3600, immutable");
+    reply.header("Accept-Ranges", "bytes");
+    // Retomada de download (§7.3): suporta um único intervalo "bytes=início-[fim]".
+    const range = /^bytes=(\d+)-(\d*)$/.exec(String(req.headers.range ?? ""));
+    if (range) {
+      const start = Number(range[1]);
+      const end = range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+      if (start >= size || start > end) {
+        reply.header("Content-Range", `bytes */${size}`);
+        return reply.status(416).send();
+      }
+      reply.header("Content-Range", `bytes ${start}-${end}/${size}`);
+      reply.header("Content-Length", end - start + 1);
+      return reply.status(206).send(ctx.storage.get(key, { start, end }));
+    }
+    reply.header("Content-Length", size);
     return reply.send(ctx.storage.get(key));
   });
 

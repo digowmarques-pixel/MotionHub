@@ -20,8 +20,17 @@ const INDEX = "installed.json";
 /** Papéis necessários para inserir; previews ficam em cache HTTP. */
 const NEEDED: ReadonlySet<FileRole> = new Set(["template", "media", "audio", "font", "subtitle"]);
 
+/** Subconjunto do index.json escrito pelo Gerenciador desktop. */
+interface ManagerIndex {
+  schema: 1;
+  packs: Record<string, { current: string; revoked?: boolean; versions: Record<string, { assets: Array<{ assetId: string; version: string; files: Array<{ path: string; role: FileRole; sha256: string; absPath: string }> }> }> }>;
+}
+
 export class AssetCache {
   private index: InstalledIndex = {};
+  /** assetId → versão → arquivos instalados pelo Gerenciador. */
+  private library = new Map<string, Map<string, InstalledFile[]>>();
+  libraryConnected = false;
 
   constructor(
     private readonly platform: Platform,
@@ -31,14 +40,44 @@ export class AssetCache {
   async load(): Promise<void> {
     const t = await this.platform.readText(INDEX);
     this.index = t ? (JSON.parse(t) as InstalledIndex) : {};
+    await this.loadLibrary();
+  }
+
+  /** Lê a biblioteca do Gerenciador. Pacotes revogados não são usados. */
+  async loadLibrary(): Promise<void> {
+    this.library.clear();
+    const raw = await this.platform.readLibraryIndex().catch(() => null);
+    this.libraryConnected = raw !== null;
+    if (!raw) return;
+    try {
+      const idx = JSON.parse(raw) as ManagerIndex;
+      for (const pack of Object.values(idx.packs ?? {})) {
+        if (pack.revoked) continue;
+        for (const a of pack.versions[pack.current]?.assets ?? []) {
+          const byVer = this.library.get(a.assetId) ?? new Map<string, InstalledFile[]>();
+          byVer.set(a.version, a.files.filter((f) => NEEDED.has(f.role)).map((f) => ({ path: f.path.split("/").slice(2).join("/"), role: f.role, sha256: f.sha256, local: f.absPath })));
+          this.library.set(a.assetId, byVer);
+        }
+      }
+    } catch {
+      this.libraryConnected = false;
+    }
   }
 
   isInstalled(assetId: string, version: string): boolean {
-    return !!this.index[assetId]?.[version];
+    return !!this.index[assetId]?.[version] || !!this.library.get(assetId)?.get(version)?.length;
+  }
+
+  fromLibrary(assetId: string, version: string): boolean {
+    return !!this.library.get(assetId)?.get(version)?.length;
   }
 
   /** Retorna os arquivos locais da versão, baixando e verificando se necessário. */
   async ensure(item: CatalogItem, version: string, onProgress?: (done: number, total: number) => void): Promise<InstalledFile[]> {
+    // 1) Instalado pelo Gerenciador (já verificado por assinatura e hash na instalação).
+    const managed = this.library.get(item.id)?.get(version);
+    if (managed?.length) return managed;
+    // 2) Cache próprio do painel.
     const cached = this.index[item.id]?.[version];
     if (cached) {
       const alive = await Promise.all(cached.map((f) => this.platform.nativePath(this.localPath(item, version, f.path))));

@@ -37,6 +37,13 @@ const toPackDTO = (p: PackRow) => ({
   createdAt: p.created_at.toISOString(),
 });
 
+/** Tipos ordenados do mais frequente ao menos frequente (o primeiro define a seção na vitrine). */
+function byFrequency(types: string[]): string[] {
+  const n = new Map<string, number>();
+  for (const t of types) n.set(t, (n.get(t) ?? 0) + 1);
+  return [...n.keys()].sort((a, b) => n.get(b)! - n.get(a)! || a.localeCompare(b));
+}
+
 export function packRoutes(app: FastifyInstance, ctx: AppContext): void {
   /** Chave pública para os clientes verificarem a assinatura dos pacotes. */
   app.get("/v1/packs/signing-key", async () => {
@@ -61,7 +68,39 @@ export function packRoutes(app: FastifyInstance, ctx: AppContext): void {
       const cur = latest.get(r.slug);
       if (!cur || compareSemver(r.version, cur.version) > 0) latest.set(r.slug, r);
     }
-    return { packs: [...latest.values()].map(toPackDTO), revoked };
+    const ids = [...latest.values()].map((r) => r.id);
+    // Resumo para a vitrine do Gerenciador: quantidade, tipos, hosts e miniatura do primeiro item.
+    const summary = new Map(
+      (
+        await ctx.db.query<{ pack_id: string; n: string; types: string[]; hosts: string[]; poster_key: string | null }>(
+          `SELECT pi.pack_id, count(*) AS n,
+             array_agg(a.type) AS types,
+             (SELECT coalesce(array_agg(DISTINCT h->>'name'), '{}') FROM pack_items pi2
+                JOIN asset_versions v2 ON v2.id = pi2.version_id, jsonb_array_elements(v2.host_targets) h
+                WHERE pi2.pack_id = pi.pack_id) AS hosts,
+             (array_agg(pf.storage_key ORDER BY a.name) FILTER (WHERE pf.storage_key IS NOT NULL))[1] AS poster_key
+           FROM pack_items pi
+           JOIN asset_versions v ON v.id = pi.version_id
+           JOIN assets a ON a.id = v.asset_id
+           LEFT JOIN LATERAL (SELECT storage_key FROM asset_files f WHERE f.version_id = v.id AND f.role = 'poster' AND f.generated LIMIT 1) pf ON true
+           WHERE pi.pack_id = ANY($1) GROUP BY pi.pack_id`,
+          [ids],
+        )
+      ).rows.map((r) => [r.pack_id, r]),
+    );
+    return {
+      packs: [...latest.values()].map((r) => {
+        const s = summary.get(r.id);
+        return {
+          ...toPackDTO(r),
+          assetCount: s ? Number(s.n) : 0,
+          types: byFrequency(s?.types ?? []),
+          hosts: s?.hosts ?? [],
+          posterUrl: s?.poster_key ? signedFileUrl(ctx, s.poster_key, 6 * 3600).url : null,
+        };
+      }),
+      revoked,
+    };
   });
 
   /** GET /v1/packs/:id/manifest — metadados assinados. */

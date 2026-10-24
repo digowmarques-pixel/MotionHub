@@ -7,3 +7,4 @@ storage/
 *.tsbuildinfo
 keys/
 dev-dist/
+release/

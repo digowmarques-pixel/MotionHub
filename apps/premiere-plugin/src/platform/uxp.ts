@@ -96,5 +96,28 @@ export async function createUxpPlatform(): Promise<Platform> {
       else await secure.setItem(key, value);
     },
     fetch: (...args) => fetch(...args),
+    // Acesso à biblioteca do Gerenciador: o usuário escolhe a pasta uma vez (permissão "request")
+    // e o plugin guarda um token persistente. POC: confirmar persistência entre sessões do Premiere.
+    async connectLibrary() {
+      const folder = await fs.getFolder();
+      if (!folder) return null;
+      const index = await folder.getEntry("index.json").catch(() => null);
+      if (!index) throw new Error("Esta pasta não é uma biblioteca do Motion Hub (index.json não encontrado).");
+      const token = await fs.createPersistentToken(folder);
+      await writeAtomic("library-token.txt", token, formats.utf8);
+      return folder.nativePath as string;
+    },
+    async readLibraryIndex() {
+      const tokenFile = await getFile("library-token.txt");
+      if (!tokenFile) return null;
+      try {
+        const token = (await tokenFile.read({ format: formats.utf8 })) as string;
+        const folder = await fs.getEntryForPersistentToken(token);
+        const index = await folder.getEntry("index.json");
+        return (await index.read({ format: formats.utf8 })) as string;
+      } catch {
+        return null;
+      }
+    },
   };
 }

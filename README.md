@@ -11,7 +11,7 @@ conforme `MEGALUME_MOTION_HUB_Especificacao_Tecnica_v1.pdf`.
 | API + fila de previews + pacotes assinados | `apps/api` | ✅ testado com Postgres e ffmpeg reais |
 | Plugin Premiere (UXP) | `apps/premiere-plugin` | ✅ núcleo testado; ⚠️ validar dentro do Premiere (ver `docs/fase0-matriz-api.md`) |
 | Painel web de administração | `apps/admin` | ✅ testado ponta a ponta no navegador |
-| Gerenciador desktop (M11) | — | ⏳ próxima etapa |
+| Gerenciador desktop (M11) | `apps/desktop` | ✅ testado (Electron real, ponta a ponta); instaladores via CI. Ver `docs/gerenciador.md` |
 | Plugin After Effects (M04) | — | ⏳ Fase 3 |
 | Legendas animadas (M08) | — | ⏳ Fase 5 |
 
@@ -58,6 +58,9 @@ cd apps/admin && pnpm dev          # http://localhost:5173
 # Plugin no navegador, com Premiere simulado
 cd apps/premiere-plugin && pnpm dev   # http://localhost:5174
 
+# Gerenciador desktop
+cd apps/desktop && pnpm start
+
 # Plugin real para o Premiere
 MOTIONHUB_API_URL=https://seu-servidor pnpm --filter @motionhub/premiere-plugin build
 # → carregar apps/premiere-plugin/dist/manifest.json no UXP Developer Tool
@@ -66,7 +69,7 @@ MOTIONHUB_API_URL=https://seu-servidor pnpm --filter @motionhub/premiere-plugin 
 ## Testes
 
 ```bash
-pnpm test     # shared (31) + api (14, precisa do Postgres em motionhub_test) + plugin (12)
+pnpm test     # shared (31) + api (14, precisa do Postgres em motionhub_test) + plugin (14) + gerenciador (12)
 ```
 
 Cobrem os casos BDD da spec (§14): CT-001 a CT-004, além de: path traversal, extensão enganosa,
