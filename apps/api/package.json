@@ -1,0 +1,33 @@
+{
+  "name": "@motionhub/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "migrate": "tsx src/cli/migrate.ts",
+    "seed": "tsx src/cli/seed.ts",
+    "worker": "tsx src/cli/worker.ts",
+    "keygen": "tsx src/cli/keygen.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.3.0",
+    "@motionhub/shared": "workspace:*",
+    "fastify": "^5.12.0",
+    "pg": "^8.23.0",
+    "yazl": "^3.3.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.15.0",
+    "@types/yazl": "^3.3.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
