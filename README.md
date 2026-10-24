@@ -15,7 +15,15 @@ conforme `MEGALUME_MOTION_HUB_Especificacao_Tecnica_v1.pdf`.
 | Plugin After Effects (M04) | — | ⏳ Fase 3 |
 | Legendas animadas (M08) | — | ⏳ Fase 5 |
 
+| Pacote inicial de conteúdo (33 itens originais) | `tools/content-generator` | ✅ gerado, importado e publicado no ambiente de teste |
+
 Capturas de tela em `docs/screenshots/`.
+
+## Conteúdo
+- **Pacote inicial gerado por código** (`tools/content-generator`): 13 sons, 5 overlays, 4 fundos, 4 formas, 4 transições e 3 contadores. Todo o conteúdo é original, com direitos da Megalume.
+- **Títulos editáveis**: os editores fazem no próprio Premiere seguindo `docs/guia-mogrt-premiere.md`.
+- **Licenciar de terceiros**: leia antes `docs/licencas-terceiros.md`. A maioria das licenças não permite biblioteca compartilhada sem plano de equipe.
+- ⚠️ Não rode `pnpm seed-demo` em produção: ele cria 12 itens de demonstração sem valor real.
 
 ## Arquitetura
 

@@ -8,3 +8,5 @@ storage/
 keys/
 dev-dist/
 release/
+entregas/
+__pycache__/
