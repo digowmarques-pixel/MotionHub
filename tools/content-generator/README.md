@@ -20,7 +20,7 @@ Formatos:
 ```bash
 pip install numpy pillow          # + ffmpeg instalado
 python3 generate.py --out ./saida                                   # cores padrão
-python3 generate.py --out ./saida --primary 1f5fbf --dark 0a1530    # cores da marca
+python3 generate.py --out ./saida --primary FFCC00 --dark 0A0A0A    # cores da marca (padrão)
 python3 generate.py --out ./saida --only contador-10s,pop           # só alguns itens
 
 # Enviar ao servidor (curador/admin publica direto com --publish; --packs cria os pacotes)

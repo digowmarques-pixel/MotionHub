@@ -72,7 +72,7 @@ export async function previewJob(ctx: AppContext, job: JobRow): Promise<Record<s
     if (posterInfo && (posterInfo.hasVideo || posterInfo.width)) {
       await run("ffmpeg", ["-nostdin", "-y", "-i", posterPath, "-frames:v", "1", "-vf", scale, "-c:v", "libwebp", "-quality", "80", posterOut]);
     } else if (posterInfo?.hasAudio) {
-      await run("ffmpeg", ["-nostdin", "-y", "-i", posterPath, "-filter_complex", "showwavespic=s=640x180:colors=0x7aa2f7", "-frames:v", "1", "-c:v", "libwebp", posterOut]);
+      await run("ffmpeg", ["-nostdin", "-y", "-i", posterPath, "-filter_complex", "showwavespic=s=640x180:colors=0xffcc00", "-frames:v", "1", "-c:v", "libwebp", posterOut]);
     } else {
       throw new PermanentJobError("corrupt_media", "poster ilegível");
     }

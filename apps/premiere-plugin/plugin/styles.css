@@ -6,12 +6,12 @@
   --line: #3a3a3a;
   --text: #e6e6e6;
   --muted: #9a9a9a;
-  --accent: #4b9cf5;
-  --accent-text: #0b1a2b;
+  --accent: #ffcc00;
+  --accent-text: #0a0a0a;
   --ok: #4cc38a;
   --warn: #e6b450;
   --err: #f0706a;
-  --focus: #8cc4ff;
+  --focus: #ffe066;
   --r: 6px;
 }
 * { box-sizing: border-box; }

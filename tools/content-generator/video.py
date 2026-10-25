@@ -12,7 +12,7 @@ rng = np.random.default_rng(424242)
 
 
 class Palette:
-    def __init__(self, primary=(75, 156, 245), dark=(11, 26, 43), light=(255, 255, 255), accent=(255, 140, 66)):
+    def __init__(self, primary=(255, 204, 0), dark=(10, 10, 10), light=(255, 255, 255), accent=(255, 140, 0)):
         self.primary, self.dark, self.light, self.accent = primary, dark, light, accent
 
 
@@ -99,7 +99,7 @@ def bokeh(pal, seconds=6):
     lw, lh = 960, 540
     yy, xx = np.mgrid[0:lh, 0:lw].astype(np.float32)
     n_c = 28
-    base = [np.array(c, np.float32) / 255 for c in (pal.primary, (255, 210, 150), (255, 255, 255), (160, 200, 255))]
+    base = [np.array(c, np.float32) / 255 for c in (pal.primary, (255, 210, 150), (255, 255, 255), pal.accent)]
     circles = [dict(x=rng.uniform(0, lw), y=rng.uniform(0, lh), r=rng.uniform(12, 45), c=base[i % 4], sp=rng.uniform(8, 25), tw=rng.uniform(0, 6.28)) for i in range(n_c)]
     for k in range(seconds * FPS):
         t = k / FPS
@@ -145,19 +145,26 @@ def dust_scratches(pal, seconds=5):
 # ---------------- fundos (loop) ----------------
 
 def gradient_fluid(pal, seconds=8, warm=False):
+    """Fundo fluido em loop. Padrão: cores da marca (escuro com brilhos da cor principal)."""
     lw, lh = 320, 180
     yy, xx = np.mgrid[0:lh, 0:lw].astype(np.float32) / lw
     c1 = np.array(pal.dark if not warm else (40, 10, 30), np.float32)
     c2 = np.array(pal.primary if not warm else (255, 90, 60), np.float32)
-    c3 = np.array((120, 80, 255) if not warm else (255, 190, 80), np.float32)
+    c3 = np.array(pal.accent if not warm else (255, 190, 80), np.float32)
     for k in range(seconds * FPS):
         p = 2 * math.pi * k / (seconds * FPS)
         f = np.sin(xx * 6 + p) + np.sin(yy * 9 - p) + np.sin((xx + yy) * 5 + 2 * p) + np.sin(np.sqrt((xx - 0.5) ** 2 + (yy - 0.3) ** 2) * 12 - p)
         a = (f + 4) / 8
         b = (np.sin(xx * 3 - p + yy * 4) + 1) / 2
-        img = c1[None, None] * (1 - a[..., None]) + c2[None, None] * a[..., None]
-        img = img * (1 - 0.35 * b[..., None]) + c3[None, None] * 0.35 * b[..., None]
-        yield img.astype(np.uint8)
+        if warm:
+            img = c1[None, None] * (1 - a[..., None]) + c2[None, None] * a[..., None]
+            img = img * (1 - 0.35 * b[..., None]) + c3[None, None] * 0.35 * b[..., None]
+        else:
+            # Predomina o escuro; a cor principal aparece em faixas de brilho que se movem.
+            w = (np.clip(a, 0, 1) ** 2.6 * 0.9)[..., None]
+            img = c1[None, None] * (1 - w) + c2[None, None] * w
+            img += c3[None, None] * (b ** 3)[..., None] * 0.18
+        yield np.clip(img, 0, 255).astype(np.uint8)
 
 
 def tech_grid(pal, seconds=6):
@@ -342,7 +349,7 @@ def iris(pal, seconds=1.0):
 
 
 def glitch_blocks(pal, seconds=0.7):
-    cols = [(255, 40, 80), (40, 220, 255), pal.primary, (255, 255, 255)]
+    cols = [pal.primary, (255, 255, 255), pal.accent, (60, 60, 60)]
     for k in range(int(seconds * FPS)):
         p = k / (seconds * FPS - 1)
         intensity = math.sin(math.pi * p)

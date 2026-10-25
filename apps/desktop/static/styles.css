@@ -1,4 +1,4 @@
-:root { --bg: #1f1f1f; --row: #2a2a2a; --section: #1a1a1a; --line: #333; --text: #e8e8e8; --muted: #9b9b9b; --link: #4b9cf5; --ok: #4cc38a; --warn: #e6b450; --bad: #f0706a; }
+:root { --bg: #1f1f1f; --row: #2a2a2a; --section: #1a1a1a; --line: #333; --text: #e8e8e8; --muted: #9b9b9b; --link: #ffcc00; --ok: #4cc38a; --warn: #e6b450; --bad: #f0706a; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
 button, input { font: inherit; color: inherit; }
@@ -73,8 +73,8 @@ button, input { font: inherit; color: inherit; }
 .login { margin: auto; width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 12px; padding: 24px; }
 .login label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); }
 .login input { background: #2b2b2b; border: 1px solid #444; border-radius: 6px; padding: 8px 10px; }
-.login .primary { background: var(--link); border: none; color: #0b1a2b; font-weight: 600; padding: 9px; border-radius: 6px; cursor: pointer; }
+.login .primary { background: var(--link); border: none; color: #0a0a0a; font-weight: 600; padding: 9px; border-radius: 6px; cursor: pointer; }
 .login .error { color: var(--bad); }
 .brand { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
 .brand small { display: block; color: var(--muted); }
-.logo { width: 36px; height: 36px; border-radius: 8px; background: var(--link); color: #0b1a2b; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; }
+.logo { width: 36px; height: 36px; border-radius: 8px; background: var(--link); color: #0a0a0a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; }

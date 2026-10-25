@@ -1,6 +1,6 @@
 """
 Gera o "Pacote Inicial Megalume": conteúdo 100% original, produzido por código.
-Uso:  python3 generate.py --out ./saida [--primary 4b9cf5 --dark 0b1a2b] [--only id1,id2]
+Uso:  python3 generate.py --out ./saida [--primary FFCC00 --dark 0A0A0A] [--only id1,id2]
 Saída: uma pasta por item com o arquivo principal, preview.mp4/.wav, poster.png e item.json.
 Depois: node import.mjs --dir ./saida --server ... --email ... (envia ao Motion Hub).
 """
@@ -27,7 +27,7 @@ VIDEO_ITEMS = [
     ("bokeh-suave", "Bokeh Suave", "overlay", V.bokeh, {}, False, 3, f"Círculos de luz desfocados subindo devagar. {OVERLAY_TIP}", ["bokeh", "luz", "festa"], ["desfoque", "luzes"], "overlays"),
     ("grao-de-filme", "Grão de Filme", "overlay", V.film_grain, {}, False, 1, "Grão de película sobre cinza médio. Use o modo Sobrepor (Overlay) com 20–40% de opacidade.", ["grão", "filme", "textura"], ["grain", "ruído"], "overlays"),
     ("poeira-e-riscos", "Poeira e Riscos", "overlay", V.dust_scratches, {}, False, 2, f"Partículas de poeira e riscos de película antiga. {OVERLAY_TIP}", ["poeira", "vintage", "textura"], ["dust", "riscos"], "overlays"),
-    ("fundo-gradiente-azul", "Fundo Gradiente Fluido Azul", "media", V.gradient_fluid, {"warm": False}, False, 2, "Fundo em loop de 8 s com gradiente fluido nas cores da marca.", ["fundo", "gradiente", "loop"], ["background", "bg"], "fundos"),
+    ("fundo-gradiente-marca", "Fundo Gradiente Megalume", "media", V.gradient_fluid, {"warm": False}, False, 2, "Fundo em loop de 8 s: preto com brilhos amarelos, nas cores da marca.", ["fundo", "gradiente", "loop", "marca"], ["background", "bg", "amarelo"], "fundos"),
     ("fundo-gradiente-quente", "Fundo Gradiente Fluido Quente", "media", V.gradient_fluid, {"warm": True}, False, 2, "Fundo em loop de 8 s com gradiente laranja e vinho.", ["fundo", "gradiente", "loop"], ["background", "bg"], "fundos"),
     ("fundo-grade-tech", "Fundo Grade Tecnológica", "media", V.tech_grid, {}, False, 2, "Grade em perspectiva avançando, em loop de 6 s.", ["fundo", "tecnologia", "grade"], ["background", "grid"], "fundos"),
     ("fundo-particulas", "Fundo Partículas", "media", V.particles, {}, False, 2, "Partículas luminosas subindo sobre fundo escuro, em loop de 8 s.", ["fundo", "partículas", "loop"], ["background", "poeira"], "fundos"),
@@ -76,8 +76,8 @@ def duration_of(path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="saida")
-    ap.add_argument("--primary", default="4b9cf5")
-    ap.add_argument("--dark", default="0b1a2b")
+    ap.add_argument("--primary", default="FFCC00")
+    ap.add_argument("--dark", default="0A0A0A")
     ap.add_argument("--only", default="")
     args = ap.parse_args()
     hexrgb = lambda s: tuple(int(s[i:i + 2], 16) for i in (0, 2, 4))
