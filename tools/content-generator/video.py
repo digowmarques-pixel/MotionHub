@@ -8,6 +8,12 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 W, H, FPS = 1920, 1080, 30
+
+
+def set_size(w, h):
+    """Muda o tamanho do quadro (ex.: 1080×1920 para vertical, 1080×1080 para elementos)."""
+    global W, H
+    W, H = w, h
 rng = np.random.default_rng(424242)
 
 
@@ -35,9 +41,9 @@ def ease_out_back(x, s=1.70158):
 
 # ---------------- codificação ----------------
 
-def encode(frames, path, alpha=False, src_size=(W, H), seconds=None, crf=18):
+def encode(frames, path, alpha=False, src_size=None, seconds=None, crf=18):
     """Recebe gerador de frames uint8 (H×W×3 ou ×4) e grava o arquivo."""
-    sw, sh = src_size
+    sw, sh = src_size or (W, H)
     pix = "rgba" if alpha else "rgb24"
     vf = [] if (sw, sh) == (W, H) else [f"scale={W}:{H}:flags=bicubic"]
     if alpha:
@@ -58,7 +64,7 @@ def encode(frames, path, alpha=False, src_size=(W, H), seconds=None, crf=18):
 
 def preview_and_poster(src, preview_path, poster_path, alpha, poster_time):
     """Preview H.264 (com alfa composto sobre cinza escuro) e poster PNG."""
-    bg = "color=c=0x1f1f1f:s=1920x1080:r=30"
+    bg = f"color=c=0x1f1f1f:s={W}x{H}:r=30"
     if alpha:
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", bg, "-i", src, "-filter_complex", "[0][1]overlay=shortest=1,format=yuv420p",
                         "-c:v", "libx264", "-crf", "23", "-movflags", "+faststart", preview_path], check=True)
@@ -74,7 +80,7 @@ def preview_and_poster(src, preview_path, poster_path, alpha, poster_time):
 # ---------------- overlays (fundo preto, usar modo Tela/Screen) ----------------
 
 def light_leak(pal, warm=True, seconds=6):
-    lw, lh = 480, 270
+    lw, lh = W // 4, H // 4
     yy, xx = np.mgrid[0:lh, 0:lw].astype(np.float32)
     cols = [(255, 120, 40), (255, 60, 30), (255, 200, 90), (255, 90, 120)] if warm else [(60, 140, 255), (120, 80, 255), (80, 220, 255), (200, 120, 255)]
     blobs = [dict(c=np.array(cols[i], np.float32) / 255, ph=rng.uniform(0, 6.28, 2), sp=rng.uniform(0.15, 0.4, 2), r=rng.uniform(60, 120), gain=rng.uniform(1.2, 2.0)) for i in range(4)]
@@ -96,7 +102,7 @@ def light_leak(pal, warm=True, seconds=6):
 
 
 def bokeh(pal, seconds=6):
-    lw, lh = 960, 540
+    lw, lh = W // 2, H // 2
     yy, xx = np.mgrid[0:lh, 0:lw].astype(np.float32)
     n_c = 28
     base = [np.array(c, np.float32) / 255 for c in (pal.primary, (255, 210, 150), (255, 255, 255), pal.accent)]
@@ -146,7 +152,7 @@ def dust_scratches(pal, seconds=5):
 
 def gradient_fluid(pal, seconds=8, warm=False):
     """Fundo fluido em loop. Padrão: cores da marca (escuro com brilhos da cor principal)."""
-    lw, lh = 320, 180
+    lw, lh = W // 6, H // 6
     yy, xx = np.mgrid[0:lh, 0:lw].astype(np.float32) / lw
     c1 = np.array(pal.dark if not warm else (40, 10, 30), np.float32)
     c2 = np.array(pal.primary if not warm else (255, 90, 60), np.float32)
@@ -194,7 +200,7 @@ def tech_grid(pal, seconds=6):
 
 
 def particles(pal, seconds=8):
-    lw, lh = 960, 540
+    lw, lh = W // 2, H // 2
     n_p = 160
     xs, ys = rng.uniform(0, lw, n_p), rng.uniform(0, lh, n_p)
     sp, sz, ph = rng.uniform(6, 22, n_p), rng.uniform(1, 3.2, n_p), rng.uniform(0, 6.28, n_p)
@@ -251,7 +257,8 @@ def ring_burst(pal, seconds=1.6):
         yield _down(im)
 
 
-def underline(pal, seconds=2.6, length=900):
+def underline(pal, seconds=2.6, length=None):
+    length = length or W * 0.47
     x0, y = (W - length) / 2 * SS, H * 0.62 * SS
     for k in range(int(seconds * FPS)):
         t = k / FPS
@@ -280,7 +287,8 @@ def pulse_ring(pal, seconds=3):
         yield _down(im)
 
 
-def corner_brackets(pal, seconds=2.6, box=(560, 320, 1360, 760), arm=110):
+def corner_brackets(pal, seconds=2.6, box=None, arm=110):
+    box = box or (W * 0.29, H * 0.3, W * 0.71, H * 0.7)
     x0, y0, x1, y1 = [v * SS for v in box]
     arm *= SS
     for k in range(int(seconds * FPS)):
@@ -393,3 +401,12 @@ def countdown(pal, start=10, seconds_per=1.0):
             txt = sc.crop(((sc.width - tw) // 2, (sc.height - th) // 2, (sc.width - tw) // 2 + tw, (sc.height - th) // 2 + th))
         im = Image.alpha_composite(im, txt)
         yield _down(im)
+
+
+# Fator de redução usado na renderização (o ffmpeg amplia com suavização): mais rápido para conteúdo desfocado.
+LOWRES = {light_leak: 4, bokeh: 2, particles: 2, gradient_fluid: 6}
+
+
+def render_size(fn):
+    f = LOWRES.get(fn, 1)
+    return (W // f, H // f)

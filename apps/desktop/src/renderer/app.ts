@@ -21,8 +21,14 @@ const SECTION: Record<string, string> = {
   media: "Componentes Gráficos",
   caption: "Legendas",
   sfx: "Sons",
+  social: "Redes Sociais",
+  icon: "Ícones Animados",
+  fx: "Efeitos 2D",
+  handdrawn: "Desenhado à Mão",
+  texture: "Texturas",
+  background: "Fundos",
 };
-const SECTION_ORDER = ["Títulos e Tipografia", "Transições", "Componentes Gráficos", "Legendas", "Sons", "Outros"];
+const SECTION_ORDER = ["Títulos e Tipografia", "Transições", "Redes Sociais", "Ícones Animados", "Efeitos 2D", "Desenhado à Mão", "Componentes Gráficos", "Fundos", "Texturas", "Legendas", "Sons", "Outros"];
 const STAGE: Record<InstallProgress["stage"], string> = {
   manifest: "Lendo manifest…",
   download: "Baixando",

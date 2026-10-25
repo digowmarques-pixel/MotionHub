@@ -278,7 +278,20 @@ export class App {
     this.renderGrid();
   }
 
+  /** Esconde categorias sem nenhum item (aparecem sozinhas quando alguém adicionar conteúdo). */
+  private updateChips(): void {
+    for (const b of this.root.querySelectorAll<HTMLElement>(".chip")) {
+      const c = b.dataset.cat as Category;
+      if (c === "all" || c === "favourites" || c === "recent" || c === this.view.category) {
+        b.hidden = false;
+        continue;
+      }
+      b.hidden = this.catalog.size > 0 && this.catalog.search("", c, { limit: 1 }).total === 0;
+    }
+  }
+
   private renderGrid(): void {
+    this.updateChips();
     const grid = $(this.root, "#grid");
     this.stopVideo();
     clear(grid);
@@ -392,7 +405,7 @@ export class App {
       preview = previewElement(it.previewUrl, it.posterUrl, /\.mp4($|\?)/.test(it.previewUrl) ? "video" : "audio");
     } else if (it.folder?.preview && this.folder) {
       // Modo pasta: o preview é copiado do NAS para o cache do plugin só quando o item é aberto.
-      const kind = /\.(wav|mp3|aiff?)$/i.test(it.folder.preview) ? "audio" : "video";
+      const kind = /\.(wav|mp3|aiff?)$/i.test(it.folder.preview) ? "audio" : /\.(png|jpe?g|webp)$/i.test(it.folder.preview) ? "image" : "video";
       preview = it.posterUrl ? h("img", { class: "preview", src: it.posterUrl, alt: "" }) : h("div", { class: "preview empty-preview" }, "Carregando preview…");
       const placeholder = preview;
       void this.folder.previewUrl(it).then((url) => {
@@ -554,7 +567,8 @@ export class App {
   }
 }
 
-function previewElement(url: string, poster: string | null, kind: "video" | "audio"): HTMLElement {
+function previewElement(url: string, poster: string | null, kind: "video" | "audio" | "image"): HTMLElement {
+  if (kind === "image") return h("img", { class: "preview", src: url, alt: "" });
   if (kind === "audio") {
     return h("div", { class: "preview audio" }, poster ? h("img", { src: poster, alt: "" }) : null, h("audio", { src: url, controls: true }));
   }

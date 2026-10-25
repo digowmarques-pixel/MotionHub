@@ -9,6 +9,12 @@ export const ASSET_TYPES = [
   "caption",
   "timer",
   "media",
+  "social",
+  "icon",
+  "fx",
+  "handdrawn",
+  "texture",
+  "background",
 ] as const;
 export type AssetType = (typeof ASSET_TYPES)[number];
 

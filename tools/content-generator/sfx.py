@@ -266,3 +266,160 @@ RECIPES = {
     "tique-relogio": (tick, "Tique de Relógio", "Tique seco para contadores e cronômetros.", ["relógio", "contador", "tique"], ["tick", "tac"]),
     "transicao-impacto": (transition_sweep, "Whoosh com Impacto", "Passagem que termina num impacto: transição pronta para cortes.", ["whoosh", "impacto", "transição"], ["swish hit"]),
 }
+
+
+# ---------------- receitas adicionais ----------------
+
+def mix(parts, total_sec):
+    """Soma trechos estéreo em posições (segundos)."""
+    out = np.zeros((int(total_sec * SR), 2))
+    for at, st in parts:
+        i = int(at * SR)
+        seg = st[: len(out) - i]
+        out[i:i + len(seg)] += seg
+    return out
+
+
+def tone(freq, sec, decay=6.0, kind="sine"):
+    t = t_axis(sec)
+    ph = 2 * np.pi * freq * t
+    w = np.sin(ph) if kind == "sine" else np.sign(np.sin(ph)) * 0.6 if kind == "square" else 2 * ((freq * t) % 1) - 1
+    return w * np.exp(-t * decay)
+
+
+def swoosh_double():
+    a = whoosh(0.4, 900, 7000, 0.45)
+    return finish(mix([(0, a), (0.18, a * 0.8)], 0.7), fade_out=0.05)
+
+
+def punch():
+    t = t_axis(0.6)
+    f = 55 + 150 * np.exp(-t * 30)
+    body = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t * 9)
+    click = highpass(rng.standard_normal(len(t)), 1500) * np.exp(-t * 200) * 0.8
+    return finish(stereo(body + click, width=0.2), fade_out=0.08)
+
+
+def metal_hit():
+    t = t_axis(2.2)
+    partials = [(523, 1.0, 3), (1187, 0.6, 4), (1789, 0.45, 5), (2593, 0.3, 6.5), (3407, 0.2, 8)]
+    x = sum(a * np.sin(2 * np.pi * f * t + rng.uniform(0, 6)) * np.exp(-t * d) for f, a, d in partials)
+    x += highpass(rng.standard_normal(len(t)), 3000) * np.exp(-t * 60) * 0.5
+    return finish(stereo(reverb(x, 1.6, 0.3, 5000)[: len(t)], width=0.5), fade_out=0.3)
+
+
+def sub_drop():
+    t = t_axis(2.5)
+    f = 30 + 50 * np.exp(-t * 2.5)
+    x = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t * 1.3)
+    return finish(stereo(x), fade_out=0.3)
+
+
+def downlifter(sec=3.0):
+    r = riser(sec)[::-1]
+    return finish(r.copy(), fade_in=0.005, fade_out=0.3)
+
+
+def typing(sec=3.0):
+    out = np.zeros((int(sec * SR), 2))
+    pos = 0.1
+    while pos < sec - 0.15:
+        k = ui_click() * rng.uniform(0.4, 0.9)
+        k = lowpass(k[:, 0], rng.uniform(3000, 7000))
+        st = stereo(k, np.full(len(k), rng.uniform(-0.3, 0.3)))
+        i = int(pos * SR)
+        out[i:i + len(st)] += st[: len(out) - i]
+        pos += rng.uniform(0.06, 0.22) + (0.35 if rng.random() < 0.08 else 0)
+    return finish(out, fade_out=0.05)
+
+
+def shutter():
+    t1 = ui_click()
+    t2 = ui_click() * 0.8
+    n = len(t_axis(0.12))
+    mech = stereo(band_sweep(pink(n), 2000, 600, q=2) * np.exp(-np.arange(n) / SR * 25))
+    return finish(mix([(0, t1), (0.02, mech * 0.6), (0.11, t2)], 0.35), fade_out=0.05)
+
+
+def success():
+    notes = [523.25, 659.25, 783.99, 1046.5]
+    parts = [(i * 0.09, stereo(tone(f, 0.9, 5) + 0.3 * tone(f * 2, 0.9, 8))) for i, f in enumerate(notes)]
+    return finish(mix(parts, 1.4), fade_out=0.2)
+
+
+def error_buzz():
+    b = stereo(lowpass(tone(155, 0.18, 2, "square"), 2500))
+    return finish(mix([(0, b), (0.24, b)], 0.5), fade_out=0.04)
+
+
+def coin():
+    a = stereo(tone(987.77, 0.09, 1, "square") * 0.6)
+    b = stereo(tone(1318.5, 0.45, 6, "square") * 0.6)
+    return finish(mix([(0, a), (0.08, b)], 0.6), fade_out=0.06)
+
+
+def notif_double():
+    d1 = ding()
+    return finish(mix([(0, d1 * 0.8), (0.16, d1)], 2.2), fade_out=0.3)
+
+
+def tick_tock(sec=4.0):
+    parts = []
+    for i in range(int(sec)):
+        tk = tick()
+        parts.append((i, tk))
+        tc = stereo(lowpass(tick()[:, 0], 1800))
+        parts.append((i + 0.5, tc * 0.9))
+    return finish(mix(parts, sec), fade_out=0.05)
+
+
+def vinyl_scratch():
+    sec = 0.9
+    t = t_axis(sec)
+    speed = np.sin(2 * np.pi * 3.2 * t) * (1 - t / sec * 0.4)
+    pos = np.cumsum(speed) / SR
+    src = band_sweep(pink(len(t)), 400, 3000, q=1.5)
+    idx = np.clip(((pos - pos.min()) / (np.ptp(pos) + 1e-9)) * (len(t) - 1), 0, len(t) - 1).astype(int)
+    x = src[idx] * (np.abs(speed) ** 0.7)
+    return finish(stereo(x, width=0.3), fade_out=0.05)
+
+
+def heartbeat():
+    def thump(level):
+        t = t_axis(0.3)
+        f = 45 + 40 * np.exp(-t * 25)
+        return np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t * 14) * level
+
+    parts = []
+    for b in range(3):
+        parts.append((b * 0.85, stereo(thump(1.0))))
+        parts.append((b * 0.85 + 0.22, stereo(thump(0.7))))
+    return finish(mix(parts, 2.7), fade_out=0.1)
+
+
+def glitch_short():
+    g = glitch()
+    return finish(g[: int(0.4 * SR)].copy(), fade_out=0.03)
+
+
+RECIPES.update({
+    "whoosh-grave": (lambda: whoosh(1.4, 120, 1200, 0.6), "Whoosh Grave", "Passagem grave e encorpada para movimentos lentos e grandes.", ["whoosh", "grave", "passagem"], ["swish"]),
+    "whoosh-agudo": (lambda: whoosh(0.7, 2000, 12000, 0.5), "Whoosh Agudo", "Passagem aguda e rápida, para elementos pequenos e textos.", ["whoosh", "agudo", "rápido"], ["swish"]),
+    "swoosh-duplo": (swoosh_double, "Swoosh Duplo", "Duas passagens rápidas, para entradas em sequência.", ["swoosh", "duplo", "texto"], ["swish"]),
+    "soco-impacto-seco": (punch, "Impacto Seco (Soco)", "Batida curta e seca, para cortes de ritmo e textos que batem.", ["impacto", "soco", "seco"], ["hit", "punch"]),
+    "impacto-metalico": (metal_hit, "Impacto Metálico", "Batida metálica com brilho e reverb curto.", ["impacto", "metal", "tecnologia"], ["hit", "clang"]),
+    "sub-drop": (sub_drop, "Sub Drop", "Queda grave que dá peso a revelações e começos de cena.", ["grave", "drop", "boom"], ["bass drop", "sub"]),
+    "riser-2s": (lambda: riser(2.0), "Riser 2 segundos", "Tensão curta crescente, para antes de um corte rápido.", ["riser", "tensão", "curto"], ["uplifter"]),
+    "riser-8s": (lambda: riser(8.0), "Riser 8 segundos", "Tensão longa crescente, para aberturas e contagens.", ["riser", "tensão", "longo"], ["uplifter"]),
+    "downlifter": (downlifter, "Downlifter", "Descida que alivia a tensão depois de um impacto.", ["downlifter", "descida", "transição"], ["queda"]),
+    "digitacao-teclado": (typing, "Digitação de Teclado", "Teclas sendo digitadas, para textos que aparecem letra a letra.", ["teclado", "digitação", "texto"], ["typing", "máquina de escrever"]),
+    "obturador-camera": (shutter, "Obturador de Câmera", "Clique de foto, para fotos congeladas e flashes.", ["câmera", "foto", "clique"], ["shutter", "flash"]),
+    "sucesso": (success, "Sucesso", "Arpejo positivo para conquistas, checklists e finais felizes.", ["sucesso", "positivo", "conquista"], ["win", "correto"]),
+    "erro": (error_buzz, "Erro", "Bip duplo de erro, para mostrar o que não fazer.", ["erro", "negativo", "alerta"], ["buzz", "errado"]),
+    "moeda": (coin, "Moeda", "Som de moeda, para dinheiro, preços e economia.", ["moeda", "dinheiro", "preço"], ["coin", "cash"]),
+    "notificacao-dupla": (notif_double, "Notificação Dupla", "Dois toques de notificação, para mensagens e alertas.", ["notificação", "mensagem", "alerta"], ["ding ding"]),
+    "tique-taque": (tick_tock, "Tique-Taque 4 s", "Relógio contínuo, combina com os contadores.", ["relógio", "contador", "tempo"], ["tick tock", "cronômetro"]),
+    "scratch-vinil": (vinyl_scratch, "Scratch de Vinil", "Arranhada de disco, para cortes engraçados e interrupções.", ["scratch", "vinil", "humor"], ["rewind", "dj"]),
+    "batida-coracao": (heartbeat, "Batida de Coração", "Três batidas graves, para tensão e emoção.", ["coração", "tensão", "batida"], ["heartbeat"]),
+    "glitch-curto": (glitch_short, "Glitch Curto", "Falha digital rápida de 0,4 s.", ["glitch", "digital", "curto"], ["falha"]),
+})
