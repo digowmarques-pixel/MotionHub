@@ -1,5 +1,8 @@
 # Instalação no escritório: Motion Hub com biblioteca no NAS
 
+> **Alternativa sem rede:** para instalar a biblioteca **em cada computador** (100% local, sem NAS nem internet), use o pacote `MotionHub-Instalacao-Local.zip`. Ele tem instaladores para Windows (`C:\MotionHub`) e Mac (`/Users/Shared/MotionHub`). Veja o LEIA-ME de dentro dele.
+
+
 **Cenário:** 8 editores, todos no escritório, um NAS compartilhado. **Não precisa de servidor.**
 **Tempo total:** cerca de 1 hora na primeira vez (30 min de preparação + 3 a 5 min por máquina).
 

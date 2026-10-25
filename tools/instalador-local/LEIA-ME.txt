@@ -1,0 +1,34 @@
+MEGALUME MOTION HUB - INSTALAÇÃO LOCAL (SEM REDE, SEM INTERNET)
+
+O que tem aqui
+  biblioteca\                       33 efeitos da Megalume (uma pasta por efeito)
+  MotionHub-Plugin\                 código do plugin do Premiere
+  Instalar-MotionHub-Windows.bat    instalador para Windows
+  Instalar-MotionHub-Mac.command    instalador para Mac
+
+ANTES DA PRIMEIRA INSTALAÇÃO (uma vez só, em qualquer computador)
+  Gere o arquivo do plugin (.ccx), recomendado pela Adobe:
+  1. Creative Cloud > Todos os aplicativos > instale "UXP Developer Tool".
+  2. Abra a UXP Developer Tool > Add Plugin > escolha MotionHub-Plugin\manifest.json
+  3. No plugin listado: ••• > Package > salve o .ccx NESTA pasta (ao lado dos instaladores).
+  Depois disso, esta pasta inteira pode ir num pendrive para as outras máquinas.
+
+EM CADA COMPUTADOR
+  Windows: dois cliques em "Instalar-MotionHub-Windows.bat"
+  Mac:     botão direito em "Instalar-MotionHub-Mac.command" > Abrir (na 1ª vez o macOS pede confirmação)
+
+  1. Os efeitos são copiados para:
+       Windows: C:\MotionHub
+       Mac:     /Users/Shared/MotionHub
+  2. O instalador do plugin abre no Creative Cloud: clique em "Instalar"
+     (aparece um aviso de que o plugin não é da loja da Adobe; é normal, ele é interno).
+  3. Abra o Premiere > Janela > Plugins UXP > Motion Hub
+  4. Na primeira vez: "Escolher pasta da biblioteca" > selecione C:\MotionHub (ou /Users/Shared/MotionHub)
+
+PARA ATUALIZAR (efeitos novos)
+  Coloque as pastas novas dentro de "biblioteca" e rode o instalador de novo em cada máquina.
+  Ele só acrescenta e atualiza; não apaga nada. No painel, clique em ⟳.
+
+DICA
+  Como o caminho é o mesmo em todas as máquinas do mesmo sistema, um projeto feito num PC
+  abre em outro PC sem "mídia offline" (desde que ambos tenham os mesmos efeitos instalados).
