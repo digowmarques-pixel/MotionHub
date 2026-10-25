@@ -186,7 +186,9 @@ export class App {
       this.view.sort = v as ViewState["sort"];
       this.refresh();
     }, { label: "Ordenar" });
-    const grid = h("div", { class: "grid", id: "grid", onscroll: () => this.maybeLoadMore() });
+    // A rolagem fica no .grid; os cards ficam num contêiner interno (no UXP, itens flex
+    // dentro de um contêiner com rolagem encolhem até virar linhas).
+    const grid = h("div", { class: "grid", id: "grid", onscroll: () => this.maybeLoadMore() }, h("div", { class: "grid-inner", id: "grid-inner" }));
 
     this.root.append(
       h("div", { class: "browse", id: "browse" },
@@ -305,7 +307,7 @@ export class App {
 
   private renderGrid(): void {
     this.updateChips();
-    const grid = $(this.root, "#grid");
+    const grid = $(this.root, "#grid-inner");
     this.stopVideo();
     clear(grid);
     const count = $(this.root, "#count");
@@ -342,7 +344,8 @@ export class App {
     if (grid.scrollTop + grid.clientHeight < grid.scrollHeight - 300) return;
     const from = this.view.shown;
     this.view.shown += PAGE;
-    for (const it of this.results.slice(from, this.view.shown)) grid.append(this.card(it));
+    const inner = $(this.root, "#grid-inner");
+    for (const it of this.results.slice(from, this.view.shown)) inner.append(this.card(it));
   }
 
   private card(it: CatalogItem): HTMLElement {
@@ -364,7 +367,7 @@ export class App {
       },
     }, fav ? "★" : "☆");
     const sub = [TYPE_LABEL[it.type], it.durationSec ? `${it.durationSec}s` : "", it.aspectRatio !== "any" ? it.aspectRatio : ""].filter(Boolean).join(" · ");
-    return btn({ class: "card", "aria-label": it.name, onclick: () => this.openDetail(it) },
+    return h("div", { class: "card", role: "button", tabindex: 0, "aria-label": it.name, onclick: () => this.openDetail(it), onkeydown: (e: Event) => { if ((e as KeyboardEvent).key === "Enter") this.openDetail(it); } },
       thumb,
       h("div", { class: "meta" }, h("div", { class: "name", title: it.name }, it.name), star),
       h("div", { class: "sub" }, sub, installed ? " · ✓ offline" : ""),

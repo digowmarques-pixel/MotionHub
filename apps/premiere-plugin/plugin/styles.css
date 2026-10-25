@@ -86,22 +86,25 @@ textarea { width: 100%; }
 .select-item.is-selected { color: var(--accent); font-weight: 700; }
 
 /* ---------- grade de cards ---------- */
-.grid { flex: 1; overflow-y: auto; display: flex; flex-direction: row; flex-wrap: wrap; align-content: flex-start; padding: 6px 4px; }
+.grid { flex: 1; overflow-y: auto; min-height: 0; padding: 6px 4px; }
+.grid-inner { display: flex; flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+/* Alturas fixas em tudo: o UXP calcula mal "height: auto" dentro de flex com quebra de linha. */
 .card {
-  width: 46%; margin: 4px 1.5%; height: auto; padding: 0; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
+  width: 46%; margin: 4px 1.5%; height: 136px; flex-shrink: 0; flex-grow: 0; display: flex; flex-direction: column; cursor: pointer;
   background-color: var(--panel); border-radius: 6px; overflow: hidden;
+  border-width: 1px; border-style: solid; border-color: var(--line);
 }
 @media (min-width: 520px) { .card { width: 30%; } }
 @media (min-width: 760px) { .card { width: 22%; } }
 .card:hover { border-color: var(--accent); }
-.thumb { height: 88px; background-color: #121212; display: flex; flex-direction: row; align-items: center; justify-content: center; overflow: hidden; }
-.thumb-img { height: 88px; }
+.thumb { height: 88px; flex-shrink: 0; background-color: #121212; display: flex; flex-direction: row; align-items: center; justify-content: center; overflow: hidden; }
+.thumb-img { height: 88px; flex-shrink: 0; }
 .thumb-empty { color: var(--muted); font-size: 11px; }
-.meta { display: flex; flex-direction: row; align-items: center; padding: 6px 6px 0 8px; }
+.meta { height: 26px; flex-shrink: 0; display: flex; flex-direction: row; align-items: center; padding: 4px 6px 0 8px; }
 .name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .star { width: 22px; height: 20px; padding: 0; border-color: transparent; background-color: transparent; color: var(--muted); font-size: 14px; flex-shrink: 0; }
 .star.is-on { color: var(--accent); }
-.sub { color: var(--muted); font-size: 11px; padding: 2px 8px 8px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub { height: 18px; flex-shrink: 0; color: var(--muted); font-size: 11px; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .empty { padding: 40px 16px; width: 100%; }
 .empty-title { font-size: 13px; font-weight: 700; text-align: center; margin-bottom: 6px; }
 .empty-text { color: var(--muted); text-align: center; }

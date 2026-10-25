@@ -67,10 +67,18 @@ export class PremiereAdapter implements HostAdapter {
     return this.p.TickTime.createWithSeconds(at);
   }
 
-  /** Executa ações como UMA etapa de Desfazer. */
-  private transaction(project: Project, actions: Action[], undo: string): void {
+  /**
+   * Executa ações como UMA etapa de Desfazer. O Premiere exige que as ações sejam
+   * CRIADAS dentro do lockedAccess ("Requires locked access"), por isso recebe uma fábrica.
+   */
+  private transaction(project: Project, build: () => Action[], undo: string): void {
     let ok = false;
     project.lockedAccess(() => {
+      const actions = build();
+      if (!actions.length) {
+        ok = true;
+        return;
+      }
       ok = project.executeTransaction((compound) => {
         for (const a of actions) compound.addAction(a);
       }, undo);
@@ -95,7 +103,7 @@ export class PremiereAdapter implements HostAdapter {
 
     const warnings: string[] = [];
     if (params.length) {
-      const actions: Action[] = [];
+      const actions: Array<{ name: string; make: () => Action }> = [];
       const video = items.find((i) => typeof (i as { getComponentChain?: unknown }).getComponentChain === "function") as
         | { getComponentChain(): Promise<{ getComponentCount(): number; getComponentAtIndex(i: number): { getParamCount(): number; getParam(i: number): ComponentParam } }>; getStartTime(): Promise<TickTime>; createSetEndAction(t: TickTime): Action }
         | undefined;
@@ -115,7 +123,8 @@ export class PremiereAdapter implements HostAdapter {
         for (const pv of params) {
           if (pv.type === "duration") {
             const start = await video.getStartTime();
-            actions.push(video.createSetEndAction(start.add(this.p.TickTime.createWithSeconds(Number(pv.value)))));
+            const end = start.add(this.p.TickTime.createWithSeconds(Number(pv.value)));
+            actions.push({ name: pv.name, make: () => video.createSetEndAction(end) });
             continue;
           }
           const prm = byName.get(normalizeName(pv.name));
@@ -123,16 +132,20 @@ export class PremiereAdapter implements HostAdapter {
             warnings.push(`Parâmetro "${pv.name}" não existe neste template.`);
             continue;
           }
-          try {
-            actions.push(prm.createSetValueAction(prm.createKeyframe(this.toHostValue(pv) as never), true));
-          } catch (e) {
-            warnings.push(`Não foi possível definir "${pv.name}": ${(e as Error).message}`);
-          }
+          const value = this.toHostValue(pv);
+          actions.push({ name: pv.name, make: () => prm.createSetValueAction(prm.createKeyframe(value as never), true) });
         }
       }
       if (actions.length) {
         try {
-          this.transaction(project, actions, `Motion Hub: parâmetros de ${label}`);
+          this.transaction(project, () => actions.flatMap(({ name, make }) => {
+            try {
+              return [make()];
+            } catch (e) {
+              warnings.push(`Não foi possível definir "${name}": ${(e as Error).message}`);
+              return [];
+            }
+          }), `Motion Hub: parâmetros de ${label}`);
         } catch (e) {
           warnings.push(`Parâmetros não aplicados: ${(e as Error).message}`);
         }
@@ -178,13 +191,12 @@ export class PremiereAdapter implements HostAdapter {
     const item = await this.importOnce(project, path);
     const time = await this.timeFor(sequence, opts.at);
     const editor = this.p.SequenceEditor.getEditor(sequence);
-    let action: Action;
     try {
-      action =
+      this.transaction(project, () => [
         opts.mode === "insert"
           ? editor.createInsertProjectItemAction(item, time, opts.videoTrack, opts.audioTrack, false)
-          : editor.createOverwriteItemAction(item, time, opts.videoTrack, opts.audioTrack);
-      this.transaction(project, [action], `Motion Hub: inserir ${label}`);
+          : editor.createOverwriteItemAction(item, time, opts.videoTrack, opts.audioTrack),
+      ], `Motion Hub: inserir ${label}`);
     } catch (e) {
       throw mapHostError(e);
     }
@@ -208,7 +220,7 @@ export class PremiereAdapter implements HostAdapter {
     const find = async () => (await root.getItems()).find((i) => i.name === BIN_NAME && i.type === this.p.ProjectItem.TYPE_BIN);
     let bin = await find();
     if (!bin) {
-      this.transaction(project, [root.createBinAction(BIN_NAME, false)], "Motion Hub: criar pasta");
+      this.transaction(project, () => [root.createBinAction(BIN_NAME, false)], "Motion Hub: criar pasta");
       bin = await find();
     }
     if (!bin) throw new ApplyError("host_api_error", "Não foi possível criar a pasta do Motion Hub no projeto.");
@@ -250,6 +262,7 @@ export function hexToRgba(hex: string): { r: number; g: number; b: number; a: nu
 export function mapHostError(e: unknown): ApplyError {
   if (e instanceof ApplyError) return e;
   const msg = e instanceof Error ? e.message : String(e);
-  if (/lock|bloquead/i.test(msg)) return new ApplyError("track_locked", msg);
+  // "Requires locked access" é erro de API, não faixa bloqueada.
+  if (!/locked access/i.test(msg) && /track.*lock|lock.*track|bloquead/i.test(msg)) return new ApplyError("track_locked", msg);
   return new ApplyError("host_api_error", msg);
 }
