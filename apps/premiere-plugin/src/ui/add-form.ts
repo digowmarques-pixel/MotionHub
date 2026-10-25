@@ -1,7 +1,7 @@
 /** Modo pasta: adicionar um efeito à biblioteca pelo próprio painel (copia para o NAS e cria o item.json). */
 import { ASSET_TYPES, roleForFile, slugify, type AssetType } from "@motionhub/shared";
 import type { PickedFile, Platform } from "../platform/types.js";
-import { h } from "./dom.js";
+import { btn, createSelect, h, setDisabled } from "./dom.js";
 import { TYPE_LABEL } from "./labels.js";
 
 const TYPE_BY_EXT: Record<string, AssetType> = { mogrt: "title", wav: "sfx", mp3: "sfx", aif: "sfx", aiff: "sfx" };
@@ -17,15 +17,16 @@ export function createAddForm(platform: Platform, cb: { onCancel: () => void; on
   const files: { main: PickedFile | null; poster: PickedFile | null; preview: PickedFile | null } = { main: null, poster: null, preview: null };
   const status = h("div", { class: "status", role: "status", "aria-live": "polite" });
   const name = h("input", { id: "add-name", type: "text", maxlength: 120, required: true }) as HTMLInputElement;
-  const type = h("select", { id: "add-type" }, ...ASSET_TYPES.map((t) => h("option", { value: t }, TYPE_LABEL[t]))) as HTMLSelectElement;
+  const type = createSelect(ASSET_TYPES.map((t) => [t, TYPE_LABEL[t]] as [string, string]), "overlay", () => {}, { id: "add-type", label: "Tipo" });
   const tags = h("input", { id: "add-tags", type: "text", placeholder: "ex.: institucional, clean" }) as HTMLInputElement;
   const summary = h("textarea", { id: "add-summary", rows: 2, maxlength: 500, placeholder: "Para que serve e como usar" }) as HTMLTextAreaElement;
-  const save = h("button", { type: "submit", class: "primary", disabled: true }, "Adicionar à biblioteca") as HTMLButtonElement;
+  const save = btn({ class: "primary is-disabled", onclick: () => void submit() }, "Adicionar à biblioteca");
+  const refresh = () => setDisabled(save, !files.main || !name.value.trim());
 
   const picker = (slot: keyof typeof files, label: string, kind: "any" | "image" | "video", hint: string) => {
-    const shown = h("span", { class: "picked" }, "nenhum arquivo");
-    const btn = h("button", {
-      type: "button",
+    const shown = h("div", { class: "picked" }, "nenhum arquivo");
+    const pick = btn({
+      class: "secondary small",
       onclick: async () => {
         const f = await platform.pickFile(kind);
         if (!f) return;
@@ -35,18 +36,17 @@ export function createAddForm(platform: Platform, cb: { onCancel: () => void; on
           if (!name.value.trim()) name.value = f.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
           type.value = TYPE_BY_EXT[extOf(f.name)] ?? type.value;
         }
-        save.disabled = !files.main || !name.value.trim();
+        refresh();
       },
     }, "Escolher…");
-    return h("div", { class: "field" }, h("label", {}, label), h("div", { class: "pick-row" }, btn, shown), h("small", { class: "hint" }, hint));
+    return h("div", { class: "field" }, h("label", {}, label), h("div", { class: "pick-row" }, pick, shown), h("div", { class: "hint" }, hint));
   };
 
-  name.addEventListener("input", () => (save.disabled = !files.main || !name.value.trim()));
+  name.addEventListener("input", refresh);
 
-  const submit = async (e: Event) => {
-    e.preventDefault();
+  const submit = async () => {
     if (!files.main || !name.value.trim()) return;
-    save.disabled = true;
+    setDisabled(save, true);
     status.className = "status";
     status.textContent = "Copiando para a biblioteca…";
     try {
@@ -82,19 +82,19 @@ export function createAddForm(platform: Platform, cb: { onCancel: () => void; on
     } catch (ex) {
       status.className = "status error";
       status.textContent = `Não foi possível adicionar: ${(ex as Error).message}`;
-      save.disabled = false;
+      setDisabled(save, false);
     }
   };
 
-  return h("form", { class: "add-form", onsubmit: submit },
+  return h("div", { class: "add-form" },
     h("div", { class: "detail-head" },
-      h("button", { type: "button", class: "icon", "aria-label": "Voltar", onclick: cb.onCancel }, "←"),
-      h("h2", {}, "Adicionar à biblioteca"),
+      btn({ class: "icon", "aria-label": "Voltar", onclick: cb.onCancel }, "←"),
+      h("div", { class: "detail-title" }, "Adicionar à biblioteca"),
     ),
     h("div", { class: "detail-body" },
       picker("main", "Arquivo do efeito *", "any", ".mogrt, .mov, .mp4, .wav, .mp3, .png…"),
       h("div", { class: "field" }, h("label", { for: "add-name" }, "Nome *"), name),
-      h("div", { class: "field" }, h("label", { for: "add-type" }, "Tipo"), type),
+      h("div", { class: "field" }, h("label", {}, "Tipo"), type.el),
       h("div", { class: "field" }, h("label", { for: "add-tags" }, "Tags (separe por vírgula)"), tags),
       h("div", { class: "field" }, h("label", { for: "add-summary" }, "Descrição"), summary),
       picker("poster", "Miniatura (opcional)", "image", "JPG ou PNG pequeno (até ~300 KB). Aparece no card."),

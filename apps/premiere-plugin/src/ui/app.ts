@@ -7,7 +7,7 @@ import { FolderSource, ServerSource } from "../core/sources.js";
 import { createAddForm } from "./add-form.js";
 import { AssetCache } from "../core/downloads.js";
 import { applyAsset, compatibility } from "../core/apply.js";
-import { $, clear, debounce, h } from "./dom.js";
+import { $, btn, clear, createSelect, debounce, h, isShown, setDisabled, show, type SelectControl } from "./dom.js";
 import { CATEGORY_LABELS, STATE_LABEL, TYPE_LABEL } from "./labels.js";
 import { createParamForm, type ParamForm } from "./param-form.js";
 
@@ -34,7 +34,6 @@ export class App {
   private selected: CatalogItem | null = null;
   private form: ParamForm | null = null;
   private busy = false;
-  private activeVideo: HTMLVideoElement | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   /** Modo pasta (NAS, sem servidor) ou servidor Motion Hub. */
   private folder: FolderSource | null = null;
@@ -81,16 +80,15 @@ export class App {
       const err = this.root.querySelector<HTMLElement>(".login-error");
       if (err) {
         err.textContent = (e as Error).message;
-        err.hidden = false;
+        show(err, true);
       }
     }
   }
 
   private openAddForm(): void {
-    const d = $(this.root, "#detail");
     this.stopVideo();
     this.selected = null;
-    d.replaceChildren(
+    $(this.root, "#detail").replaceChildren(
       createAddForm(this.platform, {
         onCancel: () => this.closeDetail(),
         onAdded: async (id) => {
@@ -101,7 +99,13 @@ export class App {
         },
       }),
     );
-    d.hidden = false;
+    this.showDetail(true);
+  }
+
+  /** Alterna entre a lista e a tela de detalhe (sem sobreposição absoluta: mais seguro no UXP). */
+  private showDetail(on: boolean): void {
+    for (const id of ["#browse"]) show(this.root.querySelector(id), !on);
+    show(this.root.querySelector("#detail"), on);
   }
 
   // ---------- Login ----------
@@ -109,46 +113,50 @@ export class App {
     this.stopPolling();
     clear(this.root);
     const server = (await this.platform.readText(LAST_SERVER)) ?? "";
-    const err = h("div", { class: "login-error", role: "alert", hidden: !error }, error ?? "");
-    const submit = async (e: Event) => {
-      e.preventDefault();
-      const f = e.target as HTMLFormElement;
-      const btn = $<HTMLButtonElement>(f, "button[type=submit]");
-      const data = new FormData(f);
-      btn.disabled = true;
-      err.hidden = true;
+    const err = h("div", { class: `login-error${error ? "" : " is-hidden"}`, role: "alert" }, error ?? "");
+    const inServer = h("input", { id: "server", type: "text", placeholder: "https://motionhub.megalume.com.br", value: server }) as HTMLInputElement;
+    const inEmail = h("input", { id: "email", type: "text", autocomplete: "username" }) as HTMLInputElement;
+    const inPass = h("input", { id: "password", type: "password", autocomplete: "current-password" }) as HTMLInputElement;
+    const enter = btn({ class: "secondary", id: "login-submit", onclick: () => void submit() }, "Entrar no servidor");
+    const submit = async () => {
+      setDisabled(enter, true);
+      show(err, false);
       try {
-        const url = String(data.get("server")).trim();
+        const url = inServer.value.trim();
         if (!url) throw new Error("Informe o endereço do servidor.");
-        await this.api.login(url, String(data.get("email")), String(data.get("password")));
+        if (!inEmail.value.trim() || !inPass.value) throw new Error("Informe e-mail e senha.");
+        await this.api.login(url, inEmail.value.trim(), inPass.value);
         await this.platform.writeText(LAST_SERVER, url);
         this.renderShell();
         void this.sync();
       } catch (ex) {
         err.textContent = ex instanceof OfflineError ? "Não foi possível conectar ao servidor. Verifique o endereço e a rede." : (ex as Error).message;
-        err.hidden = false;
-        btn.disabled = false;
+        show(err, true);
+        setDisabled(enter, false);
       }
     };
-    // Opção principal: biblioteca numa pasta da rede (NAS). Servidor fica recolhido como alternativa.
+    inPass.addEventListener("keydown", (e) => {
+      if ((e as KeyboardEvent).key === "Enter") void submit();
+    });
+    // Opção principal: biblioteca numa pasta (NAS ou local). Servidor fica recolhido como alternativa.
     const serverOpen = !!server || !!error;
+    const serverBox = h("div", { class: `server-box${serverOpen ? "" : " is-hidden"}` },
+      h("label", { for: "server" }, "Servidor"), inServer,
+      h("label", { for: "email" }, "E-mail"), inEmail,
+      h("label", { for: "password" }, "Senha"), inPass,
+      enter,
+    );
+    const toggle = btn({ class: "link", id: "server-toggle", onclick: () => show(serverBox, !isShown(serverBox)) }, "Usar um servidor Motion Hub ▾");
     this.root.append(
-      h("form", { class: "login", onsubmit: submit },
-        h("div", { class: "brand" }, h("span", { class: "logo" }, "M"), h("div", {}, h("strong", {}, "Motion Hub"), h("small", {}, "Megalume"))),
-        h("button", { type: "button", class: "primary", id: "choose-folder", onclick: () => this.chooseFolder() }, "Escolher pasta da biblioteca"),
-        h("small", { class: "hint" }, "Escolha a pasta compartilhada no NAS onde ficam os efeitos (ex.: \\\\NAS\\MotionHub). Só é preciso fazer isso uma vez."),
+      h("div", { class: "login" },
+        h("div", { class: "brand" }, h("div", { class: "logo" }, "M"), h("div", { class: "brand-text" }, h("div", { class: "brand-name" }, "Motion Hub"), h("div", { class: "brand-sub" }, "Megalume"))),
+        btn({ class: "primary", id: "choose-folder", onclick: () => this.chooseFolder() }, "Escolher pasta da biblioteca"),
+        h("div", { class: "hint" }, "Escolha a pasta onde ficam os efeitos: no NAS (ex.: \\\\NAS\\MotionHub) ou no computador (C:\\MotionHub). Só é preciso fazer isso uma vez."),
         err,
-        h("details", { class: "server-opt", open: serverOpen }, h("summary", {}, "Usar um servidor Motion Hub"),
-        h("label", { for: "server" }, "Servidor"),
-        h("input", { id: "server", name: "server", type: "url", placeholder: "https://motionhub.megalume.com.br", value: server }),
-        h("label", { for: "email" }, "E-mail"),
-        h("input", { id: "email", name: "email", type: "email", required: true, autocomplete: "username" }),
-        h("label", { for: "password" }, "Senha"),
-        h("input", { id: "password", name: "password", type: "password", required: true, autocomplete: "current-password" }),
-        h("button", { type: "submit", class: "secondary" }, "Entrar no servidor")),
+        toggle,
+        serverBox,
       ),
     );
-    $<HTMLElement>(this.root, serverOpen ? (server ? "#email" : "#server") : "#choose-folder").focus();
   }
 
   // ---------- Estrutura principal ----------
@@ -156,8 +164,8 @@ export class App {
     clear(this.root);
     const search = h("input", {
       id: "search",
-      type: "search",
-      placeholder: "Buscar títulos, transições, SFX…",
+      type: "text",
+      placeholder: "Buscar efeitos…",
       "aria-label": "Buscar",
       value: this.view.query,
       oninput: debounce((e: Event) => {
@@ -165,42 +173,44 @@ export class App {
         this.refresh();
       }, 120),
     });
-    const chips = h("nav", { class: "chips", "aria-label": "Categorias" },
+    const chips = h("div", { class: "chips", role: "tablist", "aria-label": "Categorias" },
       ...CATEGORY_LABELS.map(([c, label]) =>
-        h("button", { type: "button", class: "chip", "data-cat": c, "aria-pressed": String(c === this.view.category), onclick: () => this.setCategory(c) }, label),
+        btn({ class: `chip${c === this.view.category ? " is-on" : ""}`, "data-cat": c, role: "tab", "aria-selected": String(c === this.view.category), onclick: () => this.setCategory(c) }, label),
       ),
     );
-    const aspect = h("select", { "aria-label": "Proporção", onchange: (e: Event) => { this.view.aspect = (e.target as HTMLSelectElement).value as AspectRatio | ""; this.refresh(); } },
-      h("option", { value: "" }, "Proporção: todas"),
-      ...ASPECT_RATIOS.filter((a) => a !== "any").map((a) => h("option", { value: a }, a)),
-    );
-    const sort = h("select", { "aria-label": "Ordenar", onchange: (e: Event) => { this.view.sort = (e.target as HTMLSelectElement).value as ViewState["sort"]; this.refresh(); } },
-      h("option", { value: "relevance" }, "Relevância"),
-      h("option", { value: "name" }, "Nome"),
-      h("option", { value: "updated" }, "Mais recentes"),
-    );
-    const grid = h("main", { class: "grid", id: "grid", onscroll: () => this.maybeLoadMore() });
+    const aspect = createSelect([["", "Todos os formatos"], ...ASPECT_RATIOS.filter((a) => a !== "any").map((a) => [a, a] as [string, string])], this.view.aspect, (v) => {
+      this.view.aspect = v as AspectRatio | "";
+      this.refresh();
+    }, { label: "Proporção" });
+    const sort = createSelect([["relevance", "Relevância"], ["name", "Nome"], ["updated", "Mais recentes"]], this.view.sort, (v) => {
+      this.view.sort = v as ViewState["sort"];
+      this.refresh();
+    }, { label: "Ordenar" });
+    const grid = h("div", { class: "grid", id: "grid", onscroll: () => this.maybeLoadMore() });
 
     this.root.append(
-      h("header", { class: "top" },
-        search,
-        this.folder ? h("button", { type: "button", class: "icon add", id: "add", title: "Adicionar efeito à biblioteca", "aria-label": "Adicionar efeito", onclick: () => this.openAddForm() }, "+") : null,
-        h("button", { type: "button", class: "icon", id: "sync", title: this.folder ? "Recarregar a biblioteca da pasta" : "Sincronizar catálogo", "aria-label": "Atualizar", onclick: () => this.sync() }, "⟳"),
-        h("button", { type: "button", class: "text-btn", title: this.folder ? "Desconectar a pasta" : `Sair (${this.api.user?.name ?? ""})`, onclick: () => this.logout() }, "Sair"),
+      h("div", { class: "browse", id: "browse" },
+        h("div", { class: "top" },
+          search,
+          this.folder ? btn({ class: "icon add", id: "add", title: "Adicionar efeito à biblioteca", "aria-label": "Adicionar efeito", onclick: () => this.openAddForm() }, "+") : null,
+          btn({ class: "icon", id: "sync", title: this.folder ? "Recarregar a biblioteca" : "Sincronizar catálogo", "aria-label": "Atualizar", onclick: () => this.sync() }, "↻"),
+          btn({ class: "text-btn", title: this.folder ? "Desconectar a pasta" : `Sair (${this.api.user?.name ?? ""})`, onclick: () => this.logout() }, "Sair"),
+        ),
+        chips,
+        h("div", { class: "filters" }, aspect.el, sort.el, h("div", { id: "count", class: "count", "aria-live": "polite" })),
+        grid,
       ),
-      chips,
-      h("div", { class: "filters" }, aspect, sort, h("span", { id: "count", class: "count", "aria-live": "polite" })),
-      grid,
-      h("section", { class: "detail", id: "detail", hidden: true, "aria-label": "Detalhes do asset" }),
-      h("footer", { class: "ctx", id: "ctx" },
-        h("span", { class: "dot", id: "net" }),
-        h("span", { id: "ctx-text" }, "Lendo Premiere…"),
-        this.folder ? null : h("button", { type: "button", class: "lib-btn", id: "lib", onclick: () => this.connectLibrary() }),
+      h("div", { class: "detail is-hidden", id: "detail", "aria-label": "Detalhes do efeito" }),
+      h("div", { class: "ctx", id: "ctx" },
+        h("div", { class: "dot", id: "net" }),
+        h("div", { id: "ctx-text", class: "ctx-text" }, "Lendo Premiere…"),
+        this.folder ? null : btn({ class: "lib-btn", id: "lib", onclick: () => this.connectLibrary() }),
       ),
     );
 
+    this.showDetail(false);
     document.onkeydown = (e) => {
-      if (e.key === "Escape" && this.selected) this.closeDetail();
+      if (e.key === "Escape" && isShown($(this.root, "#detail"))) this.closeDetail();
       if (e.key === "/" && document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") {
         e.preventDefault();
         search.focus();
@@ -235,15 +245,18 @@ export class App {
 
   private setCategory(c: Category): void {
     this.view.category = c;
-    for (const b of this.root.querySelectorAll<HTMLElement>(".chip")) b.setAttribute("aria-pressed", String(b.dataset.cat === c));
+    for (const b of this.root.querySelectorAll<HTMLElement>(".chip")) {
+      b.classList.toggle("is-on", b.dataset.cat === c);
+      b.setAttribute("aria-selected", String(b.dataset.cat === c));
+    }
     this.refresh();
   }
 
   private async sync(): Promise<void> {
-    const btn = this.root.querySelector<HTMLButtonElement>("#sync");
-    btn?.classList.add("spin");
+    const syncBtn = this.root.querySelector<HTMLElement>("#sync");
+    syncBtn?.classList.add("is-busy");
     const r = await this.catalog.sync();
-    btn?.classList.remove("spin");
+    syncBtn?.classList.remove("is-busy");
     const err = this.catalog.lastSyncError;
     if (err instanceof ApiError && err.status === 401) return this.renderLogin("Sua sessão expirou. Entre novamente.");
     if (r.changed || !this.results.length || this.folder) this.refresh();
@@ -283,10 +296,10 @@ export class App {
     for (const b of this.root.querySelectorAll<HTMLElement>(".chip")) {
       const c = b.dataset.cat as Category;
       if (c === "all" || c === "favourites" || c === "recent" || c === this.view.category) {
-        b.hidden = false;
+        show(b, true);
         continue;
       }
-      b.hidden = this.catalog.size > 0 && this.catalog.search("", c, { limit: 1 }).total === 0;
+      show(b, !(this.catalog.size > 0 && this.catalog.search("", c, { limit: 1 }).total === 0));
     }
   }
 
@@ -309,18 +322,18 @@ export class App {
   private emptyState(): HTMLElement {
     if (!this.catalog.size && this.folder) {
       return h("div", { class: "empty" },
-        h("strong", {}, this.catalog.online ? "Biblioteca vazia" : "Pasta da biblioteca indisponível"),
-        h("p", {}, this.catalog.online ? "Use + para adicionar efeitos, ou copie as pastas do pacote inicial para a pasta da biblioteca e clique em ⟳." : (this.catalog.lastSyncError?.message ?? "Verifique se o NAS está ligado.")),
+        h("div", { class: "empty-title" }, this.catalog.online ? "Biblioteca vazia" : "Pasta da biblioteca indisponível"),
+        h("div", { class: "empty-text" }, this.catalog.online ? "Use + para adicionar efeitos, ou copie as pastas do pacote inicial para a pasta da biblioteca e clique em ↻." : (this.catalog.lastSyncError?.message ?? "Verifique se o NAS está ligado.")),
       );
     }
     if (!this.catalog.size) {
       return h("div", { class: "empty" },
-        h("strong", {}, this.catalog.online ? "Catálogo vazio" : "Catálogo ainda não sincronizado"),
-        h("p", {}, this.catalog.online ? "Nenhum asset publicado para sua equipe." : "Conecte-se à rede e clique em ⟳ para baixar o catálogo."),
+        h("div", { class: "empty-title" }, this.catalog.online ? "Catálogo vazio" : "Catálogo ainda não sincronizado"),
+        h("div", { class: "empty-text" }, this.catalog.online ? "Nenhum asset publicado para sua equipe." : "Conecte-se à rede e clique em ↻ para baixar o catálogo."),
       );
     }
-    if (this.view.category === "favourites" && !this.view.query) return h("div", { class: "empty" }, h("strong", {}, "Sem favoritos"), h("p", {}, "Use ☆ nos cards para guardar seus itens."));
-    return h("div", { class: "empty" }, h("strong", {}, "Nada encontrado"), h("p", {}, "Tente outro termo ou limpe os filtros."));
+    if (this.view.category === "favourites" && !this.view.query) return h("div", { class: "empty" }, h("div", { class: "empty-title" }, "Sem favoritos"), h("div", { class: "empty-text" }, "Use ☆ nos cards para guardar seus itens."));
+    return h("div", { class: "empty" }, h("div", { class: "empty-title" }, "Nada encontrado"), h("div", { class: "empty-text" }, "Tente outro termo ou limpe os filtros."));
   }
 
   private maybeLoadMore(): void {
@@ -334,146 +347,124 @@ export class App {
 
   private card(it: CatalogItem): HTMLElement {
     const installed = !it.local && it.latestVersion ? this.cache.isInstalled(it.id, it.latestVersion) : false;
+    // Miniatura com altura fixa e imagem centralizada (o UXP não suporta aspect-ratio nem object-fit).
     const thumb = h("div", { class: "thumb" },
-      it.posterUrl ? h("img", { src: it.posterUrl, alt: "", loading: "lazy", onerror: (e: Event) => ((e.target as HTMLElement).hidden = true) }) : null,
-      h("span", { class: "badge" }, TYPE_LABEL[it.type]),
-      it.durationSec ? h("span", { class: "dur" }, `${it.durationSec}s`) : null,
+      it.posterUrl ? h("img", { class: "thumb-img", src: it.posterUrl, alt: "", onerror: (e: Event) => show(e.target as Element, false) }) : h("div", { class: "thumb-empty" }, TYPE_LABEL[it.type]),
     );
-    const star = h("button", {
-      type: "button",
-      class: `star${this.catalog.isFavourite(it.id) ? " on" : ""}`,
-      "aria-label": this.catalog.isFavourite(it.id) ? "Remover dos favoritos" : "Adicionar aos favoritos",
+    const fav = this.catalog.isFavourite(it.id);
+    const star = btn({
+      class: `star${fav ? " is-on" : ""}`,
+      "aria-label": fav ? "Remover dos favoritos" : "Adicionar aos favoritos",
       onclick: async (e: Event) => {
         e.stopPropagation();
         const on = await this.catalog.toggleFavourite(it.id);
-        star.classList.toggle("on", on);
+        star.classList.toggle("is-on", on);
         star.textContent = on ? "★" : "☆";
         if (this.view.category === "favourites") this.refresh();
       },
-    }, this.catalog.isFavourite(it.id) ? "★" : "☆");
-    const card = h("div", {
-      class: "card",
-      tabindex: 0,
-      role: "button",
-      "aria-label": it.name,
-      onclick: () => this.openDetail(it),
-      onkeydown: (e: Event) => { if ((e as KeyboardEvent).key === "Enter") this.openDetail(it); },
-      onmouseenter: () => this.playPreview(thumb, it),
-      onmouseleave: () => this.stopVideo(),
-    },
+    }, fav ? "★" : "☆");
+    const sub = [TYPE_LABEL[it.type], it.durationSec ? `${it.durationSec}s` : "", it.aspectRatio !== "any" ? it.aspectRatio : ""].filter(Boolean).join(" · ");
+    return btn({ class: "card", "aria-label": it.name, onclick: () => this.openDetail(it) },
       thumb,
-      h("div", { class: "meta" }, h("span", { class: "name", title: it.name }, it.name), star),
-      h("div", { class: "sub" }, it.aspectRatio !== "any" ? it.aspectRatio : "", installed ? h("span", { class: "ok", title: "Disponível offline" }, " · ✓ offline") : ""),
+      h("div", { class: "meta" }, h("div", { class: "name", title: it.name }, it.name), star),
+      h("div", { class: "sub" }, sub, installed ? " · ✓ offline" : ""),
     );
-    return card;
-  }
-
-  /** Preview em hover: um único <video> ativo; descartado ao sair (evita vazamento de memória, M02). */
-  private playPreview(container: HTMLElement, it: CatalogItem): void {
-    if (!it.previewUrl || !it.previewUrl.includes(".mp4")) return;
-    this.stopVideo();
-    const v = h("video", { src: it.previewUrl, muted: true, loop: true, autoplay: true, playsinline: true, class: "hover-video" });
-    v.muted = true;
-    v.onerror = () => this.stopVideo();
-    container.append(v);
-    this.activeVideo = v;
-    void v.play?.()?.catch?.(() => {});
   }
 
   private stopVideo(): void {
-    const v = this.activeVideo;
-    if (!v) return;
-    v.pause?.();
-    v.removeAttribute("src");
-    v.load?.();
-    v.remove();
-    this.activeVideo = null;
+    for (const m of this.root.querySelectorAll("video, audio")) {
+      (m as HTMLMediaElement).pause?.();
+      m.removeAttribute("src");
+    }
   }
 
   // ---------- Detalhe + inserção ----------
+  private opts: { at: SelectControl; track: SelectControl; mode: SelectControl | null } | null = null;
+
   private openDetail(it: CatalogItem): void {
     this.selected = it;
     void this.catalog.markRecent(it.id);
     const d = $(this.root, "#detail");
-    clear(d);
-    d.hidden = false;
     this.stopVideo();
+    clear(d);
 
     const incompatible = compatibility(it, this.ctx?.hostVersion ?? "0");
-    let preview: HTMLElement;
-    if (it.previewUrl) {
-      preview = previewElement(it.previewUrl, it.posterUrl, /\.mp4($|\?)/.test(it.previewUrl) ? "video" : "audio");
-    } else if (it.folder?.preview && this.folder) {
-      // Modo pasta: o preview é copiado do NAS para o cache do plugin só quando o item é aberto.
-      const kind = /\.(wav|mp3|aiff?)$/i.test(it.folder.preview) ? "audio" : /\.(png|jpe?g|webp)$/i.test(it.folder.preview) ? "image" : "video";
-      preview = it.posterUrl ? h("img", { class: "preview", src: it.posterUrl, alt: "" }) : h("div", { class: "preview empty-preview" }, "Carregando preview…");
-      const placeholder = preview;
-      void this.folder.previewUrl(it).then((url) => {
-        if (url && this.selected === it && placeholder.isConnected) placeholder.replaceWith(previewElement(url, it.posterUrl, kind));
-      }).catch(() => {});
-    } else {
-      preview = it.posterUrl ? h("img", { class: "preview", src: it.posterUrl, alt: "" }) : h("div", { class: "preview empty-preview" }, "Sem preview");
-    }
+    // Começa pela miniatura; o vídeo/áudio de preview só é carregado se o editor pedir.
+    const media = h("div", { class: "preview-box" },
+      it.posterUrl ? h("img", { class: "preview", src: it.posterUrl, alt: "" }) : h("div", { class: "preview-empty" }, "Sem miniatura"),
+    );
+    const previewKind = (name: string | null | undefined): "video" | "audio" | "image" =>
+      !name ? "video" : /\.(wav|mp3|aiff?)($|\?)/i.test(name) ? "audio" : /\.(png|jpe?g|webp)($|\?)/i.test(name) ? "image" : "video";
+    const hasPreview = !!it.previewUrl || !!(it.folder?.preview && this.folder);
+    const kind = previewKind(it.folder?.preview ?? it.previewUrl);
+    const playBtn = hasPreview && kind !== "image"
+      ? btn({ class: "secondary small", id: "play-preview", onclick: async () => {
+          playBtn!.textContent = "Carregando…";
+          const url = it.previewUrl ?? (await this.folder?.previewUrl(it).catch(() => null)) ?? null;
+          if (!url || this.selected !== it) return;
+          media.replaceChildren(previewElement(url, it.posterUrl, kind));
+          show(playBtn!, false);
+        } }, kind === "audio" ? "▶ Ouvir" : "▶ Ver animação")
+      : null;
 
     this.form = createParamForm(it.manifest.parameters, defaultParameterValues(it.manifest.parameters), () => this.updateInsertButton());
     const isMogrt = it.manifest.assets.some((a) => a.role === "template");
-
     const status = h("div", { class: "status", id: "status", role: "status", "aria-live": "polite" });
-    const insertBtn = h("button", { type: "button", class: "primary", id: "insert", onclick: () => this.insert() }, "Inserir na sequência");
+    const insertBtn = btn({ class: "primary", id: "insert", onclick: () => this.insert() }, "Inserir na sequência");
+    const section = (title: string, ...body: Array<Node | null>) => h("div", { class: "section" }, h("div", { class: "section-title" }, title), ...body);
 
     d.append(
       h("div", { class: "detail-head" },
-        h("button", { type: "button", class: "icon", "aria-label": "Voltar", onclick: () => this.closeDetail() }, "←"),
-        h("h2", {}, it.name),
-        h("span", { class: "ver" }, `v${it.latestVersion}`),
+        btn({ class: "icon", "aria-label": "Voltar", onclick: () => this.closeDetail() }, "←"),
+        h("div", { class: "detail-title" }, it.name),
       ),
       h("div", { class: "detail-body" },
-        preview,
-        it.summary ? h("p", { class: "summary" }, it.summary) : null,
-        h("div", { class: "tags" }, ...it.tags.map((t) => h("span", { class: "tag" }, t))),
+        media,
+        playBtn,
+        it.summary ? h("div", { class: "summary" }, it.summary) : null,
+        h("div", { class: "tags" }, ...it.tags.slice(0, 8).map((t) => h("div", { class: "tag" }, t))),
         incompatible ? h("div", { class: "warn" }, incompatible) : null,
-        it.manifest.parameters.length
-          ? h("details", { open: true }, h("summary", {}, "Parâmetros"), this.form.el, h("button", { type: "button", class: "link", onclick: () => this.form?.reset() }, "Restaurar padrões"))
-          : null,
-        h("details", { open: true }, h("summary", {}, "Inserção"), this.insertOptions(isMogrt)),
+        it.manifest.parameters.length ? section("Parâmetros", this.form.el, btn({ class: "link", onclick: () => this.form?.reset() }, "Restaurar padrões")) : null,
+        section("Inserção", this.insertOptions(isMogrt)),
       ),
       h("div", { class: "detail-foot" }, status, insertBtn),
     );
+    this.showDetail(true);
     this.updateInsertButton();
-    $<HTMLElement>(d, "button").focus();
   }
 
   private insertOptions(isMogrt: boolean): HTMLElement {
     const tracks = Math.max(this.ctx?.sequence?.videoTracks ?? 1, 1);
-    const vOpts = [...Array.from({ length: tracks }, (_, i) => h("option", { value: i }, `V${i + 1}`)), h("option", { value: tracks }, "Nova faixa de vídeo")];
-    const vSel = h("select", { id: "opt-vtrack" }, ...vOpts);
-    vSel.value = String(isMogrt ? Math.min(1, tracks) : 0);
+    const trackOpts: Array<[string, string]> = [...Array.from({ length: tracks }, (_, i) => [String(i), `V${i + 1}`] as [string, string]), [String(tracks), "Nova faixa de vídeo"]];
+    const noop = () => {};
+    this.opts = {
+      at: createSelect([["playhead", "Na agulha (playhead)"], ["start", "Início da sequência"]], "playhead", noop, { id: "opt-at", label: "Posição" }),
+      track: createSelect(trackOpts, String(isMogrt ? Math.min(1, tracks) : 0), noop, { id: "opt-vtrack", label: "Faixa de vídeo" }),
+      mode: isMogrt ? null : createSelect([["overwrite", "Sobrescrever"], ["insert", "Inserir (empurra clipes)"]], "overwrite", noop, { id: "opt-mode", label: "Modo" }),
+    };
     return h("div", { class: "insert-opts" },
-      h("div", { class: "field" }, h("label", { for: "opt-at" }, "Posição"),
-        h("select", { id: "opt-at" }, h("option", { value: "playhead" }, "Na agulha (playhead)"), h("option", { value: "start" }, "Início da sequência"))),
-      h("div", { class: "field" }, h("label", { for: "opt-vtrack" }, "Faixa de vídeo"), vSel),
-      isMogrt ? null : h("div", { class: "field" }, h("label", { for: "opt-mode" }, "Modo"),
-        h("select", { id: "opt-mode" }, h("option", { value: "overwrite" }, "Sobrescrever"), h("option", { value: "insert" }, "Inserir (empurra clipes)"))),
+      h("div", { class: "field" }, h("label", {}, "Posição"), this.opts.at.el),
+      h("div", { class: "field" }, h("label", {}, "Faixa de vídeo"), this.opts.track.el),
+      this.opts.mode ? h("div", { class: "field" }, h("label", {}, "Modo"), this.opts.mode.el) : null,
     );
   }
 
   private readOptions(): InsertOptions {
-    const d = $(this.root, "#detail");
-    const v = Number($<HTMLSelectElement>(d, "#opt-vtrack")?.value ?? 0);
+    const v = Number(this.opts?.track.value ?? 0);
     return {
-      at: ($<HTMLSelectElement>(d, "#opt-at")?.value ?? "playhead") as "playhead" | "start",
+      at: (this.opts?.at.value ?? "playhead") as "playhead" | "start",
       videoTrack: v,
       audioTrack: v,
-      mode: ($<HTMLSelectElement>(d, "#opt-mode")?.value ?? "overwrite") as InsertOptions["mode"],
+      mode: (this.opts?.mode?.value ?? "overwrite") as InsertOptions["mode"],
     };
   }
 
   private updateInsertButton(): void {
-    const btn = this.root.querySelector<HTMLButtonElement>("#insert");
-    if (!btn || !this.selected) return;
+    const insertBtn = this.root.querySelector<HTMLElement>("#insert");
+    if (!insertBtn || !this.selected) return;
     const why = !this.ctx?.project ? "Abra um projeto no Premiere." : !this.ctx.sequence ? "Abra ou selecione uma sequência." : compatibility(this.selected, this.ctx.hostVersion) ?? (this.form && !this.form.valid() ? "Corrija os parâmetros destacados." : null);
-    btn.disabled = this.busy || !!why;
-    btn.title = why ?? "";
+    setDisabled(insertBtn, this.busy || !!why);
+    insertBtn.title = why ?? "";
     const status = this.root.querySelector<HTMLElement>("#status");
     if (status && !this.busy && !status.dataset.final) status.textContent = why ?? "";
   }
@@ -511,15 +502,12 @@ export class App {
   }
 
   private closeDetail(): void {
-    const d = $(this.root, "#detail");
-    for (const m of d.querySelectorAll("video, audio")) {
-      (m as HTMLMediaElement).pause?.();
-      m.removeAttribute("src");
-    }
-    clear(d);
-    d.hidden = true;
+    this.stopVideo();
+    clear($(this.root, "#detail"));
+    this.showDetail(false);
     this.selected = null;
     this.form = null;
+    this.opts = null;
     this.renderGrid();
   }
 
@@ -569,11 +557,14 @@ export class App {
 
 function previewElement(url: string, poster: string | null, kind: "video" | "audio" | "image"): HTMLElement {
   if (kind === "image") return h("img", { class: "preview", src: url, alt: "" });
+  const fallback = () => h("div", { class: "preview-empty" }, "Este Premiere não reproduz preview no painel. Insira na sequência para ver.");
   if (kind === "audio") {
-    return h("div", { class: "preview audio" }, poster ? h("img", { src: poster, alt: "" }) : null, h("audio", { src: url, controls: true }));
+    const a = h("audio", { src: url, controls: true, autoplay: true });
+    a.onerror = () => a.replaceWith(fallback());
+    return h("div", { class: "preview-audio" }, poster ? h("img", { class: "preview", src: poster, alt: "" }) : null, a);
   }
-  const v = h("video", { src: url, poster: poster ?? null, controls: true, loop: true, muted: true, autoplay: true, class: "preview" });
-  v.onerror = () => v.replaceWith(h("img", { class: "preview", src: poster ?? "", alt: "Preview indisponível" }));
+  const v = h("video", { src: url, poster: poster ?? null, controls: true, loop: true, autoplay: true, class: "preview" });
+  v.muted = true;
+  v.onerror = () => v.replaceWith(fallback());
   return v;
 }
-

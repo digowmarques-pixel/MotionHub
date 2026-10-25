@@ -1,6 +1,6 @@
 /** Editor de parâmetros gerado a partir do esquema tipado (M05). */
 import { EASINGS, validateParameterValues, type Parameter, type ParameterValues } from "@motionhub/shared";
-import { h } from "./dom.js";
+import { createSelect, h, show } from "./dom.js";
 
 export interface ParamForm {
   el: HTMLElement;
@@ -13,7 +13,7 @@ export function createParamForm(params: readonly Parameter[], initial: Parameter
   let values: ParameterValues = { ...initial };
   const errors = new Map<string, HTMLElement>();
   const inputs = new Map<string, () => void>();
-  const el = h("form", { class: "params", onsubmit: (e: Event) => e.preventDefault() });
+  const el = h("div", { class: "params" });
 
   const update = (key: string, v: unknown) => {
     values = { ...values, [key]: v };
@@ -26,7 +26,7 @@ export function createParamForm(params: readonly Parameter[], initial: Parameter
     for (const [k, e] of errors) {
       const issue = r.ok ? undefined : r.issues.find((i) => i.path === k);
       e.textContent = issue?.message ?? "";
-      e.hidden = !issue;
+      show(e, !!issue);
     }
     return r.ok;
   };
@@ -35,14 +35,14 @@ export function createParamForm(params: readonly Parameter[], initial: Parameter
   for (const p of params) {
     const id = `param-${p.key}`;
     const label = p.label ?? p.key;
-    const err = h("div", { class: "field-error", role: "alert", hidden: true });
+    const err = h("div", { class: "field-error is-hidden", role: "alert" });
     errors.set(p.key, err);
     const control = renderControl(p, id, () => values[p.key], (v) => update(p.key, v), inputs);
     const field = h("div", { class: "field", title: p.tooltip ?? null }, h("label", { for: id }, label), control, err);
     const gname = p.group ?? "";
     let group = groups.get(gname);
     if (!group) {
-      group = gname ? h("fieldset", { class: "group" }, h("legend", {}, gname)) : h("div", { class: "group" });
+      group = gname ? h("div", { class: "group" }, h("div", { class: "group-title" }, gname)) : h("div", { class: "group" });
       groups.set(gname, group);
       el.append(group);
     }
@@ -79,7 +79,7 @@ function renderControl(p: Parameter, id: string, get: () => unknown, set: (v: un
       return t;
     }
     case "color": {
-      const swatch = h("span", { class: "swatch", "aria-hidden": "true" });
+      const swatch = h("div", { class: "swatch", "aria-hidden": "true" });
       const paint = () => (swatch.style.background = /^#([0-9a-f]{6}|[0-9a-f]{8})$/i.test(String(get())) ? String(get()).slice(0, 7) : "transparent");
       const i = h("input", { id, type: "text", value: String(get()), placeholder: "#RRGGBB", oninput: (e: Event) => { set((e.target as HTMLInputElement).value.trim()); paint(); } });
       paint();
@@ -94,15 +94,14 @@ function renderControl(p: Parameter, id: string, get: () => unknown, set: (v: un
       const i = h("input", { id, type: "number", step, min: "min" in p ? (p.min ?? null) : null, max: "max" in p ? (p.max ?? null) : null, value: String(get()), oninput: (e: Event) => set(num((e.target as HTMLInputElement).value)) });
       syncers.set(p.key, () => (i.value = String(get())));
       const unit = p.type === "duration" ? " s" : p.type === "scale" ? " ×" : "";
-      return unit ? h("div", { class: "with-unit" }, i, h("span", { class: "unit" }, unit)) : i;
+      return unit ? h("div", { class: "with-unit" }, i, h("div", { class: "unit" }, unit)) : i;
     }
     case "enum":
     case "easing": {
       const options = p.type === "enum" ? p.options : EASINGS;
-      const s = h("select", { id, onchange: (e: Event) => set((e.target as HTMLSelectElement).value) }, ...options.map((o) => h("option", { value: o }, o)));
-      s.value = String(get());
+      const s = createSelect(options.map((o) => [o, o] as [string, string]), String(get()), (v) => set(v), { id });
       syncers.set(p.key, () => (s.value = String(get())));
-      return s;
+      return s.el;
     }
     case "bool": {
       const c = h("input", { id, type: "checkbox", checked: Boolean(get()), onchange: (e: Event) => set((e.target as HTMLInputElement).checked) });
@@ -114,7 +113,7 @@ function renderControl(p: Parameter, id: string, get: () => unknown, set: (v: un
       const x = h("input", { id, type: "number", step: 0.01, min: 0, max: 1, "aria-label": "X", value: cur()[0], oninput: () => set([num(x.value), num(y.value)]) });
       const y = h("input", { type: "number", step: 0.01, min: 0, max: 1, "aria-label": "Y", value: cur()[1], oninput: () => set([num(x.value), num(y.value)]) });
       syncers.set(p.key, () => { x.value = String(cur()[0]); y.value = String(cur()[1]); });
-      return h("div", { class: "xy" }, h("span", {}, "X"), x, h("span", {}, "Y"), y);
+      return h("div", { class: "xy" }, h("div", { class: "xy-label" }, "X"), x, h("div", { class: "xy-label" }, "Y"), y);
     }
     case "assetRef": {
       const i = h("input", { id, type: "text", value: String(get() ?? ""), oninput: (e: Event) => set((e.target as HTMLInputElement).value || null) });
