@@ -26,6 +26,11 @@ export interface InsertOptions {
   videoTrack: number;
   audioTrack: number;
   mode: "overwrite" | "insert";
+  /**
+   * Só para mídia: repete o arquivo em sequência até cobrir esta duração (segundos)
+   * ou até o fim da sequência ("end"). Ausente = duração original do arquivo.
+   */
+  fill?: number | "end";
 }
 
 export interface HostParamValue {
@@ -39,6 +44,8 @@ export interface InsertResult {
   trackItems: number;
   /** Parâmetros não encontrados no template, por exemplo. */
   warnings: string[];
+  /** Quantas vezes o editor precisa apertar Ctrl+Z para desfazer tudo (padrão 1). */
+  undoSteps?: number;
 }
 
 export interface HostAdapter {

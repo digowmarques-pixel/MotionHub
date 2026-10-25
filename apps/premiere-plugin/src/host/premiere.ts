@@ -10,6 +10,8 @@ import type { HostAdapter, HostContext, HostParamValue, InsertOptions, InsertRes
 
 type Ppro = premierepro;
 const BIN_NAME = "Megalume Motion Hub";
+/** Limite de cópias ao repetir um efeito (evita encher a timeline por engano). */
+const MAX_COPIES = 200;
 
 export class PremiereAdapter implements HostAdapter {
   constructor(
@@ -191,16 +193,76 @@ export class PremiereAdapter implements HostAdapter {
     const item = await this.importOnce(project, path);
     const time = await this.timeFor(sequence, opts.at);
     const editor = this.p.SequenceEditor.getEditor(sequence);
+    const place = (at: TickTime) =>
+      opts.mode === "insert"
+        ? editor.createInsertProjectItemAction(item, at, opts.videoTrack, opts.audioTrack, false)
+        : editor.createOverwriteItemAction(item, at, opts.videoTrack, opts.audioTrack);
+
+    // Duração maior que o arquivo: cópias lado a lado + corte da última no tempo exato.
+    const plan = opts.fill === undefined ? null : await this.fillPlan(sequence, item, time, opts.fill);
+    if (!plan) {
+      try {
+        this.transaction(project, () => [place(time)], `Motion Hub: inserir ${label}`);
+      } catch (e) {
+        throw mapHostError(e);
+      }
+      return { trackItems: 1, warnings: [] };
+    }
+
+    let undoSteps = 0;
     try {
-      this.transaction(project, () => [
-        opts.mode === "insert"
-          ? editor.createInsertProjectItemAction(item, time, opts.videoTrack, opts.audioTrack, false)
-          : editor.createOverwriteItemAction(item, time, opts.videoTrack, opts.audioTrack),
-      ], `Motion Hub: inserir ${label}`);
+      // Uma faixa nova só existe depois da primeira inserção; as demais cópias vão para ela.
+      const newTrack = opts.videoTrack >= (await sequence.getVideoTrackCount());
+      const first = newTrack ? 1 : plan.starts.length;
+      this.transaction(project, () => plan.starts.slice(0, first).map(place), `Motion Hub: inserir ${label}`);
+      undoSteps++;
+      if (first < plan.starts.length) {
+        this.transaction(project, () => plan.starts.slice(first).map(place), `Motion Hub: repetir ${label}`);
+        undoSteps++;
+      }
     } catch (e) {
       throw mapHostError(e);
     }
-    return { trackItems: 1, warnings: [] };
+
+    const warnings: string[] = [];
+    if (plan.trimTo) {
+      const last = await this.trackItemAt(sequence, opts.videoTrack, plan.starts[plan.starts.length - 1]!);
+      if (!last) {
+        warnings.push("Não achei a última cópia para cortar no tempo exato; ajuste o fim manualmente.");
+      } else {
+        try {
+          this.transaction(project, () => [last.createSetEndAction(plan.trimTo!)], `Motion Hub: ajustar duração de ${label}`);
+          undoSteps++;
+        } catch (e) {
+          warnings.push(`Não foi possível cortar a última cópia: ${(e as Error).message}`);
+        }
+      }
+    }
+    return { trackItems: plan.starts.length, warnings, undoSteps };
+  }
+
+  /** Inícios das cópias e o ponto de corte, ou null se a duração original já basta. */
+  private async fillPlan(sequence: Sequence, item: ProjectItem, time: TickTime, fill: number | "end"): Promise<{ starts: TickTime[]; trimTo: TickTime | null } | null> {
+    const clip = this.p.ClipProjectItem.cast(item);
+    const video = this.p.Constants.MediaType.VIDEO;
+    const len = (await clip.getOutPoint(video)).subtract(await clip.getInPoint(video));
+    if (!(len.seconds > 0)) return null;
+    const target = fill === "end" ? (await sequence.getEndTime()).subtract(time) : this.p.TickTime.createWithSeconds(fill);
+    if (target.seconds <= len.seconds + 1e-3) return null;
+    const count = Math.min(Math.ceil(target.seconds / len.seconds - 1e-6), MAX_COPIES);
+    const starts = [time];
+    for (let i = 1; i < count; i++) starts.push(starts[i - 1]!.add(len));
+    const end = time.add(target);
+    const covered = starts[count - 1]!.add(len);
+    return { starts, trimTo: covered.seconds - end.seconds > 1e-3 ? end : null };
+  }
+
+  private async trackItemAt(sequence: Sequence, track: number, start: TickTime) {
+    const t = await sequence.getVideoTrack(track);
+    for (const it of t.getTrackItems(this.p.Constants.TrackItemType.CLIP, false)) {
+      if (Math.abs((await it.getStartTime()).seconds - start.seconds) < 1e-3) return it;
+    }
+    return null;
   }
 
   /** Importa para a pasta "Megalume Motion Hub", reaproveitando item já importado do mesmo arquivo. */

@@ -382,7 +382,7 @@ export class App {
   }
 
   // ---------- Detalhe + inserção ----------
-  private opts: { at: SelectControl; track: SelectControl; mode: SelectControl | null } | null = null;
+  private opts: { at: SelectControl; track: SelectControl; mode: SelectControl | null; fill: SelectControl | null } | null = null;
 
   private openDetail(it: CatalogItem): void {
     this.selected = it;
@@ -394,7 +394,7 @@ export class App {
     const incompatible = compatibility(it, this.ctx?.hostVersion ?? "0");
     // Começa pela miniatura; o vídeo/áudio de preview só é carregado se o editor pedir.
     const media = h("div", { class: "preview-box" },
-      it.posterUrl ? h("img", { class: "preview", src: it.posterUrl, alt: "" }) : h("div", { class: "preview-empty" }, "Sem miniatura"),
+      it.posterUrl ? h("img", { class: "preview", src: it.posterUrl, alt: "", onload: (e: Event) => fitImage(e.target as HTMLImageElement) }) : h("div", { class: "preview-empty" }, "Sem miniatura"),
     );
     const previewKind = (name: string | null | undefined): "video" | "audio" | "image" =>
       !name ? "video" : /\.(wav|mp3|aiff?)($|\?)/i.test(name) ? "audio" : /\.(png|jpe?g|webp)($|\?)/i.test(name) ? "image" : "video";
@@ -427,8 +427,9 @@ export class App {
         it.summary ? h("div", { class: "summary" }, it.summary) : null,
         h("div", { class: "tags" }, ...it.tags.slice(0, 8).map((t) => h("div", { class: "tag" }, t))),
         incompatible ? h("div", { class: "warn" }, incompatible) : null,
+        this.formatWarning(it),
         it.manifest.parameters.length ? section("Parâmetros", this.form.el, btn({ class: "link", onclick: () => this.form?.reset() }, "Restaurar padrões")) : null,
-        section("Inserção", this.insertOptions(isMogrt)),
+        section("Inserção", this.insertOptions(isMogrt, it)),
       ),
       h("div", { class: "detail-foot" }, status, insertBtn),
     );
@@ -436,7 +437,21 @@ export class App {
     this.updateInsertButton();
   }
 
-  private insertOptions(isMogrt: boolean): HTMLElement {
+  /** Avisa quando o formato do efeito não bate com a sequência e oferece a versão certa. */
+  private formatWarning(it: CatalogItem): HTMLElement | null {
+    const seq = this.ctx?.sequence;
+    if (!seq || it.aspectRatio === "any") return null;
+    const want = aspectOf(seq.width, seq.height);
+    if (!want || want === it.aspectRatio) return null;
+    const base = baseName(it.name);
+    const variant = this.catalog.search("", it.type, { limit: 10_000 }).items.find((o) => o.id !== it.id && o.aspectRatio === want && baseName(o.name) === base);
+    return h("div", { class: "warn" },
+      h("div", {}, `Este efeito é ${it.aspectRatio} e a sequência é ${want}: ele não vai preencher a tela.`),
+      variant ? btn({ class: "link", onclick: () => this.openDetail(variant) }, `Usar a versão ${want}: ${variant.name} →`) : null,
+    );
+  }
+
+  private insertOptions(isMogrt: boolean, it: CatalogItem): HTMLElement {
     const tracks = Math.max(this.ctx?.sequence?.videoTracks ?? 1, 1);
     const trackOpts: Array<[string, string]> = [...Array.from({ length: tracks }, (_, i) => [String(i), `V${i + 1}`] as [string, string]), [String(tracks), "Nova faixa de vídeo"]];
     const noop = () => {};
@@ -444,11 +459,20 @@ export class App {
       at: createSelect([["playhead", "Na agulha (playhead)"], ["start", "Início da sequência"]], "playhead", noop, { id: "opt-at", label: "Posição" }),
       track: createSelect(trackOpts, String(isMogrt ? Math.min(1, tracks) : 0), noop, { id: "opt-vtrack", label: "Faixa de vídeo" }),
       mode: isMogrt ? null : createSelect([["overwrite", "Sobrescrever"], ["insert", "Inserir (empurra clipes)"]], "overwrite", noop, { id: "opt-mode", label: "Modo" }),
+      fill: isMogrt || !LOOPABLE.has(it.type) ? null : createSelect([
+        ["", it.durationSec ? `Original (${fmtSec(it.durationSec)})` : "Original"],
+        ["10", "10 s"], ["30", "30 s"], ["60", "1 min"], ["300", "5 min"],
+        ["end", "Até o fim da sequência"],
+      ], "", noop, { id: "opt-fill", label: "Duração" }),
     };
     return h("div", { class: "insert-opts" },
       h("div", { class: "field" }, h("label", {}, "Posição"), this.opts.at.el),
       h("div", { class: "field" }, h("label", {}, "Faixa de vídeo"), this.opts.track.el),
       this.opts.mode ? h("div", { class: "field" }, h("label", {}, "Modo"), this.opts.mode.el) : null,
+      this.opts.fill
+        ? h("div", { class: "field" }, h("label", {}, "Duração"), this.opts.fill.el,
+            h("div", { class: "hint" }, "Durações maiores repetem o efeito em sequência na faixa, sem emendas visíveis nos efeitos em loop."))
+        : null,
     );
   }
 
@@ -459,6 +483,7 @@ export class App {
       videoTrack: v,
       audioTrack: v,
       mode: (this.opts?.mode?.value ?? "overwrite") as InsertOptions["mode"],
+      fill: !this.opts?.fill?.value ? undefined : this.opts.fill.value === "end" ? "end" : Number(this.opts.fill.value),
     };
   }
 
@@ -570,4 +595,31 @@ function previewElement(url: string, poster: string | null, kind: "video" | "aud
   v.muted = true;
   v.onerror = () => v.replaceWith(fallback());
   return v;
+}
+
+/** Tipos de efeito pensados para repetir (fundos, texturas, overlays). */
+const LOOPABLE = new Set<string>(["background", "texture", "overlay"]);
+
+const fmtSec = (s: number) => (s >= 60 ? `${Math.floor(s / 60)} min ${Math.round(s % 60)} s` : `${Math.round(s * 10) / 10} s`);
+
+/** "Grão de Filme (Vertical 9:16)" → "grão de filme". */
+const baseName = (name: string) => name.replace(/\s*\([^)]*\)\s*$/, "").trim().toLowerCase();
+
+/** Formato da sequência entre os suportados, ou null se for outro. */
+export function aspectOf(w: number, h: number): "16:9" | "9:16" | "1:1" | "4:5" | null {
+  if (!w || !h) return null;
+  const r = w / h;
+  const known: Array<["16:9" | "9:16" | "1:1" | "4:5", number]> = [["16:9", 16 / 9], ["9:16", 9 / 16], ["1:1", 1], ["4:5", 4 / 5]];
+  const best = known.reduce((a, b) => (Math.abs(b[1] - r) < Math.abs(a[1] - r) ? b : a));
+  return Math.abs(best[1] - r) < 0.03 ? best[0] : null;
+}
+
+/** Encaixa a imagem na caixa mantendo a proporção (o UXP não tem object-fit). */
+function fitImage(img: HTMLImageElement, maxH = 240): void {
+  const w = img.naturalWidth, hgt = img.naturalHeight;
+  const boxW = img.parentElement?.clientWidth ?? 0;
+  if (!w || !hgt || !boxW) return;
+  const scale = Math.min(boxW / w, maxH / hgt);
+  img.style.width = `${Math.round(w * scale)}px`;
+  img.style.height = `${Math.round(hgt * scale)}px`;
 }

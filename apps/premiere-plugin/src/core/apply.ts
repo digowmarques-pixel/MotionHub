@@ -86,7 +86,8 @@ export async function applyAsset(req: ApplyRequest, deps: ApplyDeps): Promise<Ap
     if (result.trackItems < 1) throw new ApplyError("host_api_error", "Nada foi inserido na sequência.");
     op.advance("completed");
     const warn = result.warnings.length ? ` Atenção: ${result.warnings.join(" ")}` : "";
-    return { op, result, message: `"${item.name}" inserido em ${ctx.sequence.name}. Use Ctrl+Z / Cmd+Z para desfazer.${warn}` };
+    const undo = (result.undoSteps ?? 1) > 1 ? `Ctrl+Z / Cmd+Z ${result.undoSteps} vezes` : "Ctrl+Z / Cmd+Z";
+    return { op, result, message: `"${item.name}" inserido em ${ctx.sequence.name}. Use ${undo} para desfazer.${warn}` };
   } catch (e) {
     const err = e instanceof ApplyError ? e : new ApplyError("host_api_error", (e as Error).message);
     op.fail(err.code, err.message);
