@@ -7,3 +7,4 @@ export * from "./apply-state.js";
 export * from "./search.js";
 export type * from "./api-types.js";
 export * from "./sha256.js";
+export * from "./folder-item.js";

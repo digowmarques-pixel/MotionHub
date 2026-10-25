@@ -68,6 +68,28 @@ def waveform_poster(st, path, pal):
     im.save(path)
 
 
+def make_thumb(item_dir, item):
+    """Miniatura pequena (480 px, JPG) para os cards do painel: leve para ler do NAS."""
+    src = os.path.join(item_dir, item.get("poster") or "")
+    if not item.get("poster") or not os.path.exists(src):
+        return
+    im = Image.open(src).convert("RGB")
+    im.thumbnail((480, 270), Image.LANCZOS)
+    im.save(os.path.join(item_dir, "thumb.jpg"), quality=82, optimize=True)
+    item["thumb"] = "thumb.jpg"
+
+
+def add_thumbs(out):
+    """Atualiza uma saída já gerada: cria thumb.jpg e registra no item.json."""
+    for d in sorted(os.listdir(out)):
+        p = os.path.join(out, d, "item.json")
+        if not os.path.exists(p):
+            continue
+        item = json.load(open(p))
+        make_thumb(os.path.join(out, d), item)
+        json.dump(item, open(p, "w"), ensure_ascii=False, indent=2)
+
+
 def duration_of(path):
     out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path], capture_output=True, text=True, check=True)
     return round(float(out.stdout.strip()), 2)
@@ -79,7 +101,11 @@ def main():
     ap.add_argument("--primary", default="FFCC00")
     ap.add_argument("--dark", default="0A0A0A")
     ap.add_argument("--only", default="")
+    ap.add_argument("--thumbs-only", action="store_true", help="só cria thumb.jpg numa saída já gerada")
     args = ap.parse_args()
+    if args.thumbs_only:
+        add_thumbs(args.out)
+        return
     hexrgb = lambda s: tuple(int(s[i:i + 2], 16) for i in (0, 2, 4))
     pal = V.Palette(primary=hexrgb(args.primary), dark=hexrgb(args.dark))
     only = set(filter(None, args.only.split(",")))
@@ -98,6 +124,7 @@ def main():
         waveform_poster(st, os.path.join(d, "poster.png"), pal)
         item = {**common, "id": f"meg-sfx-{sid}", "name": name, "type": "sfx", "summary": summary, "tags": tags + ["som"], "synonyms": syn,
                 "main": main_file, "role": "audio", "preview": main_file, "poster": "poster.png", "durationSec": round(len(st) / sfx.SR, 2), "pack": "sons"}
+        make_thumb(d, item)
         json.dump(item, open(os.path.join(d, "item.json"), "w"), ensure_ascii=False, indent=2)
         print(f"som    {name:34s} {time.time() - t0:5.1f}s")
 
@@ -117,6 +144,7 @@ def main():
         item = {**common, "id": f"meg-{vid}", "name": name, "type": typ, "summary": summary, "tags": tags, "synonyms": syn,
                 "main": main_file, "role": "media", "preview": "preview.mp4", "poster": "poster.png", "durationSec": duration_of(src),
                 "fps": V.FPS, "alpha": alpha, "pack": pack}
+        make_thumb(d, item)
         json.dump(item, open(os.path.join(d, "item.json"), "w"), ensure_ascii=False, indent=2)
         mb = os.path.getsize(src) / 1e6
         print(f"vídeo  {name:34s} {time.time() - t0:5.1f}s  {mb:6.1f} MB")

@@ -62,7 +62,7 @@ export async function applyAsset(req: ApplyRequest, deps: ApplyDeps): Promise<Ap
     if (!values.ok) throw new ApplyError("unsupported", `Parâmetros inválidos: ${values.issues.map((i) => `${i.path} (${i.message})`).join(", ")}`);
     op.advance("compatibility_checked");
 
-    if (!deps.cache.isInstalled(item.id, version)) op.advance("downloading");
+    if (!item.local?.length && !deps.cache.isInstalled(item.id, version)) op.advance("downloading");
     const files = await deps.cache.ensure(item, version, deps.onProgress);
     op.advance("validating");
 

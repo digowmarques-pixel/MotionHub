@@ -114,3 +114,14 @@ fieldset.group legend { color: var(--muted); padding: 0; margin-bottom: 4px; }
 .status.error { color: var(--err); }
 .text-btn { flex: none; padding: 0 10px; height: 30px; color: var(--muted); }
 .lib-btn { margin-left: auto; flex: none; background: none; border: 1px solid var(--line); padding: 2px 8px; font-size: 11px; color: var(--muted); }
+.login .or { text-align: center; color: var(--muted); margin: 10px 0 2px; }
+.login .secondary { background: none; border: 1px solid var(--accent); color: var(--accent); padding: 9px; }
+.hint { color: var(--muted); font-size: 11px; line-height: 1.4; }
+.icon.add { font-size: 18px; font-weight: 700; color: var(--accent); }
+.add-form { display: flex; flex-direction: column; height: 100%; }
+.pick-row { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.picked { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.server-opt { margin-top: 18px; background: none; }
+.server-opt[open] { display: flex; flex-direction: column; gap: 6px; }
+.server-opt summary { color: var(--muted); font-weight: 400; }
+.login .primary#choose-folder { margin-top: 6px; }

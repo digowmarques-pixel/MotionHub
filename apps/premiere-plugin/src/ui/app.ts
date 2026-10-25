@@ -3,6 +3,8 @@ import type { Platform } from "../platform/types.js";
 import type { HostAdapter, HostContext, InsertOptions } from "../host/types.js";
 import { ApiClient, ApiError, OfflineError } from "../core/api-client.js";
 import { CatalogStore, type CatalogItem, type Category } from "../core/catalog.js";
+import { FolderSource, ServerSource } from "../core/sources.js";
+import { createAddForm } from "./add-form.js";
 import { AssetCache } from "../core/downloads.js";
 import { applyAsset, compatibility } from "../core/apply.js";
 import { $, clear, debounce, h } from "./dom.js";
@@ -11,6 +13,7 @@ import { createParamForm, type ParamForm } from "./param-form.js";
 
 const PAGE = 60;
 const LAST_SERVER = "motionhub.lastServer";
+const MODE_FILE = "mode.json";
 
 interface ViewState {
   query: string;
@@ -33,6 +36,8 @@ export class App {
   private busy = false;
   private activeVideo: HTMLVideoElement | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
+  /** Modo pasta (NAS, sem servidor) ou servidor Motion Hub. */
+  private folder: FolderSource | null = null;
 
   constructor(
     private readonly root: HTMLElement,
@@ -40,18 +45,63 @@ export class App {
     private readonly host: HostAdapter,
   ) {
     this.api = new ApiClient(platform);
-    this.catalog = new CatalogStore(platform, this.api);
+    this.catalog = new CatalogStore(platform, new ServerSource(this.api));
     this.cache = new AssetCache(platform, this.api);
   }
 
   async start(): Promise<void> {
-    await Promise.all([this.catalog.load(), this.cache.load()]);
+    await this.cache.load();
+    const mode = await this.platform.readText(MODE_FILE).catch(() => null);
+    if (mode && JSON.parse(mode).mode === "folder") return this.enterFolderMode();
+    await this.catalog.load();
     if (await this.api.restore()) {
       this.renderShell();
       void this.sync();
     } else {
       await this.renderLogin();
     }
+  }
+
+  // ---------- Modo pasta (NAS) ----------
+  private async enterFolderMode(): Promise<void> {
+    this.folder = new FolderSource(this.platform);
+    this.catalog = new CatalogStore(this.platform, this.folder);
+    await this.catalog.load();
+    this.renderShell();
+    await this.sync();
+  }
+
+  private async chooseFolder(): Promise<void> {
+    try {
+      const path = await this.platform.connectFolderLibrary();
+      if (!path) return;
+      await this.platform.writeText(MODE_FILE, JSON.stringify({ mode: "folder" }));
+      await this.enterFolderMode();
+    } catch (e) {
+      const err = this.root.querySelector<HTMLElement>(".login-error");
+      if (err) {
+        err.textContent = (e as Error).message;
+        err.hidden = false;
+      }
+    }
+  }
+
+  private openAddForm(): void {
+    const d = $(this.root, "#detail");
+    this.stopVideo();
+    this.selected = null;
+    d.replaceChildren(
+      createAddForm(this.platform, {
+        onCancel: () => this.closeDetail(),
+        onAdded: async (id) => {
+          await this.sync();
+          const it = this.catalog.get(id);
+          if (it) this.openDetail(it);
+          else this.closeDetail();
+        },
+      }),
+    );
+    d.hidden = false;
   }
 
   // ---------- Login ----------
@@ -63,12 +113,13 @@ export class App {
     const submit = async (e: Event) => {
       e.preventDefault();
       const f = e.target as HTMLFormElement;
-      const btn = $<HTMLButtonElement>(f, "button");
+      const btn = $<HTMLButtonElement>(f, "button[type=submit]");
       const data = new FormData(f);
       btn.disabled = true;
       err.hidden = true;
       try {
         const url = String(data.get("server")).trim();
+        if (!url) throw new Error("Informe o endereço do servidor.");
         await this.api.login(url, String(data.get("email")), String(data.get("password")));
         await this.platform.writeText(LAST_SERVER, url);
         this.renderShell();
@@ -79,20 +130,25 @@ export class App {
         btn.disabled = false;
       }
     };
+    // Opção principal: biblioteca numa pasta da rede (NAS). Servidor fica recolhido como alternativa.
+    const serverOpen = !!server || !!error;
     this.root.append(
       h("form", { class: "login", onsubmit: submit },
         h("div", { class: "brand" }, h("span", { class: "logo" }, "M"), h("div", {}, h("strong", {}, "Motion Hub"), h("small", {}, "Megalume"))),
+        h("button", { type: "button", class: "primary", id: "choose-folder", onclick: () => this.chooseFolder() }, "Escolher pasta da biblioteca"),
+        h("small", { class: "hint" }, "Escolha a pasta compartilhada no NAS onde ficam os efeitos (ex.: \\\\NAS\\MotionHub). Só é preciso fazer isso uma vez."),
+        err,
+        h("details", { class: "server-opt", open: serverOpen }, h("summary", {}, "Usar um servidor Motion Hub"),
         h("label", { for: "server" }, "Servidor"),
-        h("input", { id: "server", name: "server", type: "url", required: true, placeholder: "https://motionhub.megalume.com.br", value: server }),
+        h("input", { id: "server", name: "server", type: "url", placeholder: "https://motionhub.megalume.com.br", value: server }),
         h("label", { for: "email" }, "E-mail"),
         h("input", { id: "email", name: "email", type: "email", required: true, autocomplete: "username" }),
         h("label", { for: "password" }, "Senha"),
         h("input", { id: "password", name: "password", type: "password", required: true, autocomplete: "current-password" }),
-        err,
-        h("button", { type: "submit", class: "primary" }, "Entrar"),
+        h("button", { type: "submit", class: "secondary" }, "Entrar no servidor")),
       ),
     );
-    $<HTMLInputElement>(this.root, server ? "#email" : "#server").focus();
+    $<HTMLElement>(this.root, serverOpen ? (server ? "#email" : "#server") : "#choose-folder").focus();
   }
 
   // ---------- Estrutura principal ----------
@@ -128,8 +184,9 @@ export class App {
     this.root.append(
       h("header", { class: "top" },
         search,
-        h("button", { type: "button", class: "icon", id: "sync", title: "Sincronizar catálogo", "aria-label": "Sincronizar", onclick: () => this.sync() }, "⟳"),
-        h("button", { type: "button", class: "text-btn", title: `Sair (${this.api.user?.name ?? ""})`, onclick: () => this.logout() }, "Sair"),
+        this.folder ? h("button", { type: "button", class: "icon add", id: "add", title: "Adicionar efeito à biblioteca", "aria-label": "Adicionar efeito", onclick: () => this.openAddForm() }, "+") : null,
+        h("button", { type: "button", class: "icon", id: "sync", title: this.folder ? "Recarregar a biblioteca da pasta" : "Sincronizar catálogo", "aria-label": "Atualizar", onclick: () => this.sync() }, "⟳"),
+        h("button", { type: "button", class: "text-btn", title: this.folder ? "Desconectar a pasta" : `Sair (${this.api.user?.name ?? ""})`, onclick: () => this.logout() }, "Sair"),
       ),
       chips,
       h("div", { class: "filters" }, aspect, sort, h("span", { id: "count", class: "count", "aria-live": "polite" })),
@@ -138,7 +195,7 @@ export class App {
       h("footer", { class: "ctx", id: "ctx" },
         h("span", { class: "dot", id: "net" }),
         h("span", { id: "ctx-text" }, "Lendo Premiere…"),
-        h("button", { type: "button", class: "lib-btn", id: "lib", onclick: () => this.connectLibrary() }),
+        this.folder ? null : h("button", { type: "button", class: "lib-btn", id: "lib", onclick: () => this.connectLibrary() }),
       ),
     );
 
@@ -189,12 +246,19 @@ export class App {
     btn?.classList.remove("spin");
     const err = this.catalog.lastSyncError;
     if (err instanceof ApiError && err.status === 401) return this.renderLogin("Sua sessão expirou. Entre novamente.");
-    if (r.changed || !this.results.length) this.refresh();
+    if (r.changed || !this.results.length || this.folder) this.refresh();
     this.renderNet();
   }
 
   private async logout(): Promise<void> {
-    await this.api.logout();
+    if (this.folder) {
+      await this.platform.writeText(MODE_FILE, JSON.stringify({ mode: "server" }));
+      this.folder = null;
+      this.catalog = new CatalogStore(this.platform, new ServerSource(this.api));
+      await this.catalog.load();
+    } else {
+      await this.api.logout();
+    }
     await this.renderLogin();
   }
 
@@ -219,7 +283,9 @@ export class App {
     this.stopVideo();
     clear(grid);
     const count = $(this.root, "#count");
-    count.textContent = `${this.total} ${this.total === 1 ? "item" : "itens"}`;
+    const problems = this.folder?.problems ?? [];
+    count.textContent = `${this.total} ${this.total === 1 ? "item" : "itens"}${problems.length ? ` · ⚠ ${problems.length} com problema` : ""}`;
+    count.title = problems.map((p) => `${p.dir}: ${p.message}`).join("\n");
     if (!this.results.length) {
       grid.append(this.emptyState());
       return;
@@ -228,6 +294,12 @@ export class App {
   }
 
   private emptyState(): HTMLElement {
+    if (!this.catalog.size && this.folder) {
+      return h("div", { class: "empty" },
+        h("strong", {}, this.catalog.online ? "Biblioteca vazia" : "Pasta da biblioteca indisponível"),
+        h("p", {}, this.catalog.online ? "Use + para adicionar efeitos, ou copie as pastas do pacote inicial para a pasta da biblioteca e clique em ⟳." : (this.catalog.lastSyncError?.message ?? "Verifique se o NAS está ligado.")),
+      );
+    }
     if (!this.catalog.size) {
       return h("div", { class: "empty" },
         h("strong", {}, this.catalog.online ? "Catálogo vazio" : "Catálogo ainda não sincronizado"),
@@ -248,7 +320,7 @@ export class App {
   }
 
   private card(it: CatalogItem): HTMLElement {
-    const installed = it.latestVersion ? this.cache.isInstalled(it.id, it.latestVersion) : false;
+    const installed = !it.local && it.latestVersion ? this.cache.isInstalled(it.id, it.latestVersion) : false;
     const thumb = h("div", { class: "thumb" },
       it.posterUrl ? h("img", { src: it.posterUrl, alt: "", loading: "lazy", onerror: (e: Event) => ((e.target as HTMLElement).hidden = true) }) : null,
       h("span", { class: "badge" }, TYPE_LABEL[it.type]),
@@ -315,12 +387,20 @@ export class App {
     this.stopVideo();
 
     const incompatible = compatibility(it, this.ctx?.hostVersion ?? "0");
-    const preview = it.previewUrl
-      ? it.previewUrl.includes(".mp4")
-        ? h("video", { src: it.previewUrl, poster: it.posterUrl ?? null, controls: true, loop: true, muted: true, autoplay: true, class: "preview" })
-        : h("div", { class: "preview audio" }, it.posterUrl ? h("img", { src: it.posterUrl, alt: "" }) : null, h("audio", { src: it.previewUrl, controls: true }))
-      : h("div", { class: "preview empty-preview" }, "Sem preview");
-    if (preview instanceof HTMLVideoElement) preview.onerror = () => preview.replaceWith(h("img", { class: "preview", src: it.posterUrl ?? "", alt: "Preview indisponível" }));
+    let preview: HTMLElement;
+    if (it.previewUrl) {
+      preview = previewElement(it.previewUrl, it.posterUrl, /\.mp4($|\?)/.test(it.previewUrl) ? "video" : "audio");
+    } else if (it.folder?.preview && this.folder) {
+      // Modo pasta: o preview é copiado do NAS para o cache do plugin só quando o item é aberto.
+      const kind = /\.(wav|mp3|aiff?)$/i.test(it.folder.preview) ? "audio" : "video";
+      preview = it.posterUrl ? h("img", { class: "preview", src: it.posterUrl, alt: "" }) : h("div", { class: "preview empty-preview" }, "Carregando preview…");
+      const placeholder = preview;
+      void this.folder.previewUrl(it).then((url) => {
+        if (url && this.selected === it && placeholder.isConnected) placeholder.replaceWith(previewElement(url, it.posterUrl, kind));
+      }).catch(() => {});
+    } else {
+      preview = it.posterUrl ? h("img", { class: "preview", src: it.posterUrl, alt: "" }) : h("div", { class: "preview empty-preview" }, "Sem preview");
+    }
 
     this.form = createParamForm(it.manifest.parameters, defaultParameterValues(it.manifest.parameters), () => this.updateInsertButton());
     const isMogrt = it.manifest.assets.some((a) => a.role === "template");
@@ -466,7 +546,20 @@ export class App {
     const n = this.root.querySelector<HTMLElement>("#net");
     if (!n) return;
     n.className = `dot ${this.catalog.online ? "online" : "offline"}`;
+    if (this.folder) {
+      n.title = this.catalog.online ? `Biblioteca: ${this.folder.displayPath ?? ""}` : `Pasta indisponível — mostrando a última lista conhecida${this.catalog.lastSyncError ? ` (${this.catalog.lastSyncError.message})` : ""}`;
+      return;
+    }
     n.title = this.catalog.online ? "Online — catálogo sincronizado" : `Offline — usando biblioteca local${this.catalog.lastSyncError ? ` (${this.catalog.lastSyncError.message})` : ""}`;
   }
+}
+
+function previewElement(url: string, poster: string | null, kind: "video" | "audio"): HTMLElement {
+  if (kind === "audio") {
+    return h("div", { class: "preview audio" }, poster ? h("img", { src: poster, alt: "" }) : null, h("audio", { src: url, controls: true }));
+  }
+  const v = h("video", { src: url, poster: poster ?? null, controls: true, loop: true, muted: true, autoplay: true, class: "preview" });
+  v.onerror = () => v.replaceWith(h("img", { class: "preview", src: poster ?? "", alt: "Preview indisponível" }));
+  return v;
 }
 

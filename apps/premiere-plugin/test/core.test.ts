@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { ApiClient } from "../src/core/api-client.js";
 import { CatalogStore } from "../src/core/catalog.js";
+import { ServerSource } from "../src/core/sources.js";
 import { AssetCache } from "../src/core/downloads.js";
 import { applyAsset, type ApplyDeps } from "../src/core/apply.js";
 import { MemoryPlatform, MockPremiere } from "../dev/mocks.js";
@@ -21,7 +22,7 @@ beforeEach(async () => {
   platform = new MemoryPlatform("25.6.0", server.fetch);
   api = new ApiClient(platform);
   await api.login("http://srv", "e@x", "senha");
-  catalog = new CatalogStore(platform, api);
+  catalog = new CatalogStore(platform, new ServerSource(api));
   cache = new AssetCache(platform, api);
   host = new MockPremiere();
   await catalog.load();
@@ -39,7 +40,7 @@ describe("catálogo offline-first", () => {
     server.online = false;
     const api2 = new ApiClient(platform);
     expect(await api2.restore()).toBe(true);
-    const c2 = new CatalogStore(platform, api2);
+    const c2 = new CatalogStore(platform, new ServerSource(api2));
     await c2.load();
     expect(c2.size).toBe(2);
     await c2.sync();

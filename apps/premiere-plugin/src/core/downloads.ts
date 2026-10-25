@@ -74,6 +74,8 @@ export class AssetCache {
 
   /** Retorna os arquivos locais da versão, baixando e verificando se necessário. */
   async ensure(item: CatalogItem, version: string, onProgress?: (done: number, total: number) => void): Promise<InstalledFile[]> {
+    // 0) Modo pasta: o arquivo já está no NAS; o Premiere importa direto de lá.
+    if (item.local?.length) return item.local.map((f) => ({ ...f, sha256: "" }));
     // 1) Instalado pelo Gerenciador (já verificado por assinatura e hash na instalação).
     const managed = this.library.get(item.id)?.get(version);
     if (managed?.length) return managed;

@@ -25,6 +25,15 @@ Capturas de tela em `docs/screenshots/`.
 - **Licenciar de terceiros**: leia antes `docs/licencas-terceiros.md`. A maioria das licenças não permite biblioteca compartilhada sem plano de equipe.
 - ⚠️ Não rode `pnpm seed-demo` em produção: ele cria 12 itens de demonstração sem valor real.
 
+## Dois modos de uso
+
+| Modo | Quando usar | O que precisa |
+|---|---|---|
+| **Pasta no NAS** (recomendado para a Megalume hoje) | Time no escritório, sem TI | Uma pasta compartilhada e o plugin em cada máquina. Ver **`docs/instalacao-escritorio-nas.md`** |
+| **Servidor** | Revisão por curador, auditoria, acesso remoto, muitos editores | API + PostgreSQL + (opcional) Gerenciador desktop |
+
+O mesmo plugin funciona nos dois modos, e dá para migrar do modo pasta para o servidor depois.
+
 ## Arquitetura
 
 ```
@@ -77,7 +86,7 @@ MOTIONHUB_API_URL=https://seu-servidor pnpm --filter @motionhub/premiere-plugin 
 ## Testes
 
 ```bash
-pnpm test     # shared (31) + api (14, precisa do Postgres em motionhub_test) + plugin (14) + gerenciador (12)
+pnpm test     # shared (34) + api (14, precisa do Postgres em motionhub_test) + plugin (23) + gerenciador (12)
 ```
 
 Cobrem os casos BDD da spec (§14): CT-001 a CT-004, além de: path traversal, extensão enganosa,

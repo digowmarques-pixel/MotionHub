@@ -1,7 +1,87 @@
 /** Implementações simuladas de plataforma e host, para navegador e testes. */
 import { ApplyError } from "@motionhub/shared";
-import type { Platform } from "../src/platform/types.js";
+import type { FolderLibrary, PickedFile, Platform } from "../src/platform/types.js";
 import type { HostAdapter, HostContext, HostParamValue, InsertOptions, InsertResult } from "../src/host/types.js";
+
+/** Biblioteca em pasta simulada em memória (testes). */
+export class MemoryFolderLibrary implements FolderLibrary {
+  files = new Map<string, Uint8Array>();
+  pickedData = new WeakMap<PickedFile, Uint8Array>();
+  available = true;
+  constructor(readonly displayPath = "\\\\NAS\\MotionHub") {}
+
+  put(rel: string, data: string | Uint8Array) {
+    this.files.set(rel, typeof data === "string" ? new TextEncoder().encode(data) : data);
+  }
+  private check() {
+    if (!this.available) throw new Error("NAS indisponível");
+  }
+  async scan(maxDepth: number) {
+    this.check();
+    const dirs = new Map<string, string[]>();
+    for (const p of this.files.keys()) {
+      const parts = p.split("/");
+      const name = parts.pop()!;
+      if (!parts.length || parts.length > maxDepth) continue;
+      const d = parts.join("/");
+      dirs.set(d, [...(dirs.get(d) ?? []), name]);
+    }
+    return [...dirs].map(([dir, files]) => ({ dir, files }));
+  }
+  async readText(rel: string) {
+    this.check();
+    const b = this.files.get(rel);
+    return b ? new TextDecoder().decode(b) : null;
+  }
+  async readBinary(rel: string) {
+    this.check();
+    return this.files.get(rel) ?? null;
+  }
+  nativePath(rel: string) {
+    return `${this.displayPath}\\${rel.split("/").join("\\")}`;
+  }
+  async addItem(dirName: string, files: Array<{ as: string; file: PickedFile }>, itemJson: string) {
+    this.check();
+    let name = dirName;
+    for (let i = 2; [...this.files.keys()].some((k) => k.startsWith(`${name}/`)); i++) name = `${dirName}-${i}`;
+    for (const f of files) this.put(`${name}/${f.as}`, this.pickedData.get(f.file) ?? new Uint8Array());
+    this.put(`${name}/item.json`, itemJson);
+    return name;
+  }
+  pick(name: string, data: Uint8Array | string): PickedFile {
+    const h = { name };
+    this.pickedData.set(h, typeof data === "string" ? new TextEncoder().encode(data) : data);
+    return h;
+  }
+}
+
+/**
+ * Pasta de rede simulada por HTTP (só para o modo navegador): lê uma cópia da biblioteca
+ * servida junto do painel, com uma listagem _lista.json gerada por dev/make-listing.mjs.
+ */
+export class HttpFolderLibrary implements FolderLibrary {
+  readonly displayPath = "\\\\NAS\\MotionHub";
+  constructor(private readonly base: string) {}
+  async scan() {
+    const r = await fetch(`${this.base}/_lista.json`);
+    if (!r.ok) throw new Error("pasta simulada indisponível");
+    return (await r.json()) as Array<{ dir: string; files: string[] }>;
+  }
+  async readText(rel: string) {
+    const r = await fetch(`${this.base}/${rel}`);
+    return r.ok ? r.text() : null;
+  }
+  async readBinary(rel: string) {
+    const r = await fetch(`${this.base}/${rel}`);
+    return r.ok ? new Uint8Array(await r.arrayBuffer()) : null;
+  }
+  nativePath(rel: string) {
+    return `${this.displayPath}\\${rel.split("/").join("\\")}`;
+  }
+  async addItem(): Promise<string> {
+    throw new Error("Na simulação do navegador não é possível gravar na pasta.");
+  }
+}
 
 export class MemoryPlatform implements Platform {
   readonly os = "browser";
@@ -21,6 +101,29 @@ export class MemoryPlatform implements Platform {
     }
   }
   libraryIndex: string | null = null;
+  folder: FolderLibrary | null = null;
+  /** Fila de arquivos que o "diálogo" devolverá em pickFile. */
+  pickQueue: PickedFile[] = [];
+  mediaCache = new Map<string, string>();
+  async connectFolderLibrary() {
+    return this.folder?.displayPath ?? null;
+  }
+  async folderLibrary() {
+    return this.folder;
+  }
+  async cacheMedia(key: string, load: () => Promise<Uint8Array | null>) {
+    if (this.mediaCache.has(key)) return this.mediaCache.get(key)!;
+    const bytes = await load();
+    if (!bytes) return null;
+    const url = typeof URL.createObjectURL === "function" && typeof Blob !== "undefined" && typeof window !== "undefined"
+      ? URL.createObjectURL(new Blob([bytes as BlobPart]))
+      : `mem:${key}`;
+    this.mediaCache.set(key, url);
+    return url;
+  }
+  async pickFile() {
+    return this.pickQueue.shift() ?? null;
+  }
   async connectLibrary() {
     return this.libraryIndex ? "/mock/Library" : null;
   }

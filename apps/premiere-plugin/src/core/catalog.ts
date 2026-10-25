@@ -4,11 +4,15 @@
  */
 import { SearchIndex, type AssetDTO, type AssetType, type PresetManifest, type SearchOptions } from "@motionhub/shared";
 import type { Platform } from "../platform/types.js";
-import { OfflineError, type ApiClient } from "./api-client.js";
+import { OfflineError } from "./api-client.js";
+import { FolderUnavailableError, type CatalogSource, type LocalFile } from "./sources.js";
 
 export interface CatalogItem extends AssetDTO {
   manifest: PresetManifest;
   deleted?: boolean;
+  /** Modo pasta: arquivos já acessíveis no NAS (inseridos de lá, sem download). */
+  local?: LocalFile[];
+  folder?: { dir: string; preview: string | null };
 }
 
 interface CatalogFile {
@@ -24,7 +28,6 @@ interface UserState {
 
 export type Category = "all" | "favourites" | "recent" | AssetType;
 
-const CATALOG = "catalog.json";
 const USER = "user-state.json";
 const MAX_RECENTS = 50;
 
@@ -38,11 +41,11 @@ export class CatalogStore {
 
   constructor(
     private readonly platform: Platform,
-    private readonly api: ApiClient,
+    readonly source: CatalogSource,
   ) {}
 
   async load(): Promise<void> {
-    const cat = await this.readJson<CatalogFile>(CATALOG);
+    const cat = await this.readJson<CatalogFile>(this.source.cacheFile);
     if (cat) {
       this.serverTime = cat.serverTime;
       for (const it of cat.items) this.items.set(it.id, it);
@@ -63,26 +66,29 @@ export class CatalogStore {
     return this.state.favourites.includes(id);
   }
 
-  /** Sincroniza incrementalmente. Falha de rede mantém o catálogo local funcionando. */
+  /** Sincroniza com a fonte. Falha (rede/NAS) mantém o catálogo em cache funcionando. */
   async sync(): Promise<{ changed: number }> {
     try {
-      const q = this.serverTime ? `?since=${encodeURIComponent(this.serverTime)}` : "";
-      const r = await this.api.request<{ serverTime: string; items: CatalogItem[] }>("GET", `/v1/catalog${q}`);
+      const r = await this.source.fetch(this.serverTime);
+      if (r.full) this.items.clear();
       for (const it of r.items) this.items.set(it.id, it);
       this.serverTime = r.serverTime;
-      await this.platform.writeText(CATALOG, JSON.stringify({ serverTime: this.serverTime, items: [...this.items.values()] } satisfies CatalogFile));
+      await this.platform.writeText(this.source.cacheFile, JSON.stringify({ serverTime: this.serverTime, items: [...this.items.values()] } satisfies CatalogFile));
       this.rebuild();
-      await this.flushFavourites();
-      const remote = await this.api.request<Array<{ assetId: string }>>("GET", "/v1/favourites");
-      const pendingAdd = this.state.pending.filter((p) => p.op === "add").map((p) => p.assetId);
-      const pendingRemove = new Set(this.state.pending.filter((p) => p.op === "remove").map((p) => p.assetId));
-      this.state.favourites = [...new Set([...remote.map((f) => f.assetId), ...pendingAdd])].filter((id) => !pendingRemove.has(id));
-      await this.saveState();
+      const remote = this.source.remoteFavourites;
+      if (remote) {
+        await this.flushFavourites();
+        const ids = await remote.list();
+        const pendingAdd = this.state.pending.filter((p) => p.op === "add").map((p) => p.assetId);
+        const pendingRemove = new Set(this.state.pending.filter((p) => p.op === "remove").map((p) => p.assetId));
+        this.state.favourites = [...new Set([...ids, ...pendingAdd])].filter((id) => !pendingRemove.has(id));
+        await this.saveState();
+      }
       this.online = true;
       this.lastSyncError = null;
       return { changed: r.items.length };
     } catch (e) {
-      this.online = !(e instanceof OfflineError);
+      this.online = !(e instanceof OfflineError || e instanceof FolderUnavailableError);
       this.lastSyncError = e as Error;
       return { changed: 0 };
     }
@@ -104,7 +110,9 @@ export class CatalogStore {
   async toggleFavourite(id: string): Promise<boolean> {
     const fav = !this.isFavourite(id);
     this.state.favourites = fav ? [id, ...this.state.favourites] : this.state.favourites.filter((f) => f !== id);
-    this.state.pending = [...this.state.pending.filter((p) => p.assetId !== id), { assetId: id, op: fav ? "add" : "remove" }];
+    if (this.source.remoteFavourites) {
+      this.state.pending = [...this.state.pending.filter((p) => p.assetId !== id), { assetId: id, op: fav ? "add" : "remove" }];
+    }
     await this.saveState();
     void this.flushFavourites().catch(() => {});
     return fav;
@@ -117,9 +125,11 @@ export class CatalogStore {
 
   /** Envia operações de favorito pendentes (feitas offline). */
   async flushFavourites(): Promise<void> {
+    const remote = this.source.remoteFavourites;
+    if (!remote) return;
     while (this.state.pending.length) {
       const p = this.state.pending[0]!;
-      await this.api.request(p.op === "add" ? "PUT" : "DELETE", `/v1/favourites/${p.assetId}`);
+      await remote.set(p.assetId, p.op === "add");
       this.state.pending.shift();
       await this.saveState();
     }
