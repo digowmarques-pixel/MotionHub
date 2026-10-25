@@ -13,7 +13,7 @@ class T {
   subtract(o: T) { return new T(this.seconds - o.seconds); }
 }
 
-function fakePremiere(opts: { mediaSec?: number; seqEnd?: number; tracks?: number } = {}) {
+function fakePremiere(opts: { mediaSec?: number; seqEnd?: number; tracks?: number; blendStart?: number } = {}) {
   const mediaSec = opts.mediaSec ?? 4;
   let locked = false;
   const guard = <V>(v: V): V => {
@@ -24,7 +24,7 @@ function fakePremiere(opts: { mediaSec?: number; seqEnd?: number; tracks?: numbe
   const TYPE_BIN = 2, TYPE_CLIP = 1;
   const binItems: Array<{ name: string; type: number; path: string }> = [];
   const rootItems: Array<{ name: string; type: number }> = [];
-  type Clip = { track: number; start: number; end: number; path: string };
+  type Clip = { track: number; start: number; end: number; path: string; blend: number; opacity: number };
   const clips: Clip[] = [];
   let trackCount = opts.tracks ?? 2;
   const bin = { getItems: async () => binItems };
@@ -56,7 +56,7 @@ function fakePremiere(opts: { mediaSec?: number; seqEnd?: number; tracks?: numbe
   const place = (kind: string) => (item: { path: string }, at: T, track: number) => guard({
     run: () => {
       if (track >= trackCount) track = trackCount++;
-      clips.push({ track, start: at.seconds, end: at.seconds + mediaSec, path: item.path });
+      clips.push({ track, start: at.seconds, end: at.seconds + mediaSec, path: item.path, blend: opts.blendStart ?? 18, opacity: 100 });
       log.push(`${kind} V${track + 1} @${at.seconds}`);
     },
   });
@@ -69,6 +69,19 @@ function fakePremiere(opts: { mediaSec?: number; seqEnd?: number; tracks?: numbe
       getTrackItems: () => clips.filter((c) => c.track === i).map((c) => ({
         getStartTime: async () => new T(c.start),
         createSetEndAction: (t: T) => guard({ run: () => { if (t.seconds > c.end) throw new Error("além da mídia"); c.end = t.seconds; } }),
+        getComponentChain: async () => {
+          const param = (displayName: string, key: "blend" | "opacity") => ({
+            displayName,
+            getStartValue: async () => ({ value: { value: c[key] } }),
+            createKeyframe: (v: number) => guard({ v }),
+            createSetValueAction: (k: { v: number }) => guard({ run: () => { c[key] = k.v; } }),
+          });
+          const comps = [
+            { getMatchName: async () => "AE.ADBE Motion", getParamCount: () => 0, getParam: () => null },
+            { getMatchName: async () => "AE.ADBE Opacity", getParamCount: () => 2, getParam: (i: number) => (i === 0 ? param("Opacidade", "opacity") : param("Modo de mesclagem", "blend")) },
+          ];
+          return { getComponentCount: () => guard(comps.length), getComponentAtIndex: (i: number) => guard(comps[i]) };
+        },
       })),
     }),
   };
@@ -138,6 +151,34 @@ describe("PremiereAdapter", () => {
     await adapter.insertMedia("C:/grao.mp4", { ...base, videoTrack: 2, fill: 10 }, "Grão");
     expect(new Set(clips.map((c) => c.track))).toEqual(new Set([2]));
     expect(clips).toHaveLength(3);
+  });
+
+  it("Mesclagem: overlay sem alpha vai em Tela, com opacidade, em todas as cópias", async () => {
+    const { adapter, clips } = fakePremiere({ mediaSec: 4 });
+    const r = await adapter.insertMedia("C:/leak.mp4", { ...base, fill: 10, blend: "screen", opacity: 80 }, "Leak");
+    expect(clips.map((c) => [c.blend, c.opacity])).toEqual([[22, 80], [22, 80], [22, 80]]);
+    expect(clips.at(-1)!.end).toBe(13);
+    expect(r).toMatchObject({ warnings: [], undoSteps: 2 });
+  });
+
+  it("Mesclagem: grão em Sobrepor", async () => {
+    const { adapter, clips } = fakePremiere();
+    await adapter.insertMedia("C:/grao.mp4", { ...base, blend: "overlay", opacity: 35 }, "Grão");
+    expect(clips.map((c) => [c.blend, c.opacity])).toEqual([[19, 35]]);
+  });
+
+  it("Mesclagem: se o Premiere não usar a tabela esperada, não mexe e avisa", async () => {
+    const { adapter, clips } = fakePremiere({ blendStart: 1 });
+    const r = await adapter.insertMedia("C:/leak.mp4", { ...base, blend: "screen" }, "Leak");
+    expect(clips[0]!.blend).toBe(1);
+    expect(r.warnings.join(" ")).toMatch(/Tela/);
+  });
+
+  it("Mídia com alpha (sem blend) é inserida sem ajustes extras", async () => {
+    const { adapter, clips } = fakePremiere();
+    const r = await adapter.insertMedia("C:/icone.mov", base, "Ícone");
+    expect(clips[0]!.blend).toBe(18);
+    expect(r.undoSteps).toBe(1);
   });
 
   it("'Requires locked access' não é confundido com faixa bloqueada", () => {

@@ -39,6 +39,13 @@ export type HostName = (typeof HOSTS)[number];
 export const ASPECT_RATIOS = ["16:9", "9:16", "1:1", "4:5", "any"] as const;
 export type AspectRatio = (typeof ASPECT_RATIOS)[number];
 
+/**
+ * Modo de mesclagem aplicado na inserção. Efeitos sem transparência (light leak,
+ * grão, bokeh) só funcionam sobre o vídeo com "screen" (Tela) ou "overlay" (Sobrepor).
+ */
+export const BLEND_MODES = ["normal", "screen", "overlay", "soft-light", "multiply", "linear-dodge"] as const;
+export type BlendMode = (typeof BLEND_MODES)[number];
+
 /** Papel de cada arquivo dentro de uma versão (AssetFile.role). */
 export const FILE_ROLES = ["template", "media", "audio", "preview", "poster", "font", "subtitle"] as const;
 export type FileRole = (typeof FILE_ROLES)[number];

@@ -40,3 +40,14 @@ Legenda: ✅ implementado com API oficial · ⚠️ implementado, comportamento 
 3. No UXP Developer Tool: *Add Plugin* → `apps/premiere-plugin/dist/manifest.json` → *Load*.
 4. Premiere: *Janela → Extensões (UXP) → Motion Hub*.
 5. Percorra os itens marcados ⚠️/❌ acima com um MOGRT real da Megalume e registre o resultado nesta tabela.
+
+## Mesclagem de overlays (plugin 0.3.4)
+
+Overlays sem alpha (.mp4: light leak, bokeh, poeira, grão) recebem `blend`/`opacity` do item.json
+(ou da regra `inferLook` para itens antigos) e o plugin ajusta o efeito **Opacidade** (`AE.ADBE Opacity`).
+
+| Ponto | Situação |
+|---|---|
+| Valor do "Modo de mesclagem" = índice em ordem alfabética (Normal 18, Tela 22, Sobrepor 19) | Mapeado por terceiros no Premiere 25.2 (Osiris-Premiere-MCP, MIT). **Validar no 26.x.** |
+| Trava de segurança | Antes de aplicar, o plugin lê o modo do clipe novo; se não for 18 (Normal), não altera e mostra aviso para aplicar à mão. |
+| Opacidade em 0–100 | Validar no Premiere real. |

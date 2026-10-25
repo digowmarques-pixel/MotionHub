@@ -49,6 +49,13 @@ SQUARE, WIDE, TALL = (1080, 1080), (1920, 1080), (1080, 1920)
 EL_TIP = "Elemento com transparência (1080×1080): coloque numa faixa acima do vídeo e ajuste a escala. Serve para vídeos horizontais e verticais."
 
 
+
+def look(item):
+    """Overlays sem alpha (.mp4) precisam de mesclagem para não cobrir o vídeo; o plugin aplica na inserção."""
+    if item["type"] != "overlay" or item.get("alpha", True):
+        return {}
+    return {"blend": "overlay", "opacity": 35} if "grão" in item["tags"] else {"blend": "screen"}
+
 def extra_items():
     """Itens novos: redes sociais, ícones, efeitos 2D, desenhado à mão, transições extras e versões verticais."""
     it = []
@@ -231,6 +238,7 @@ def main():
         item = {**common, "id": f"meg-sfx-{sid}", "name": name, "type": "sfx", "summary": summary, "tags": tags + ["som"], "synonyms": syn,
                 "main": main_file, "role": "audio", "preview": main_file, "poster": "poster.png", "durationSec": round(len(st) / sfx.SR, 2), "pack": "sons", "aspectRatio": "any"}
         make_thumb(d, item)
+        item.update(look(item))
         json.dump(item, open(os.path.join(d, "item.json"), "w"), ensure_ascii=False, indent=2)
         print(f"som    {name:34s} {time.time() - t0:5.1f}s")
 
@@ -250,6 +258,7 @@ def main():
                 "main": main_file, "role": "media", "preview": "preview.mp4", "poster": "poster.png", "durationSec": duration_of(src),
                 "fps": V.FPS, "alpha": alpha, "pack": pack}
         make_thumb(d, item)
+        item.update(look(item))
         json.dump(item, open(os.path.join(d, "item.json"), "w"), ensure_ascii=False, indent=2)
         mb = os.path.getsize(src) / 1e6
         print(f"vídeo  {name:34s} {time.time() - t0:5.1f}s  {mb:6.1f} MB")
@@ -270,6 +279,7 @@ def main():
                 "main": main_file, "role": "media", "preview": "preview.mp4", "poster": "poster.png", "durationSec": duration_of(src),
                 "fps": V.FPS, "alpha": x["alpha"], "pack": x["pack"], "aspectRatio": x["aspect"]}
         make_thumb(d, item)
+        item.update(look(item))
         json.dump(item, open(os.path.join(d, "item.json"), "w"), ensure_ascii=False, indent=2)
         print(f"novo   {x['name']:44s} {time.time() - t0:5.1f}s  {os.path.getsize(src) / 1e6:6.1f} MB")
     V.set_size(*WIDE)
@@ -284,6 +294,7 @@ def main():
         item = {**common, "id": f"meg-{tid}", "name": name, "type": "texture", "summary": summary, "tags": tags, "synonyms": syn,
                 "main": f"{tid}.png", "role": "media", "preview": f"{tid}.png", "poster": f"{tid}.png", "pack": "texturas", "aspectRatio": "any"}
         make_thumb(d, item)
+        item.update(look(item))
         json.dump(item, open(os.path.join(d, "item.json"), "w"), ensure_ascii=False, indent=2)
         print(f"textura {name}")
 

@@ -5,11 +5,38 @@
  */
 import type { premierepro } from "@adobe/premierepro";
 import type { Project, Sequence, ProjectItem, TickTime, ComponentParam, Action } from "@adobe/premierepro";
-import { ApplyError } from "@motionhub/shared";
+import { ApplyError, type BlendMode } from "@motionhub/shared";
 import type { HostAdapter, HostContext, HostParamValue, InsertOptions, InsertResult } from "./types.js";
 
 type Ppro = premierepro;
 const BIN_NAME = "Megalume Motion Hub";
+const OPACITY_MATCH = "AE.ADBE Opacity";
+
+/**
+ * Índice de cada modo no parâmetro "Modo de mesclagem": ordem alfabética (em inglês) com
+ * Subtract e Divide no fim; Normal = 18. Fonte: mapeamento por renderização no Premiere 25.2
+ * (projeto Osiris-Premiere-MCP, licença MIT). Conferido em tempo de execução (ver lookActions).
+ */
+export const PREMIERE_BLEND: Record<BlendMode, number> = { normal: 18, screen: 22, overlay: 19, "soft-light": 23, multiply: 17, "linear-dodge": 14 };
+const BLEND_LABEL: Record<BlendMode, string> = { normal: "Normal", screen: "Tela", overlay: "Sobrepor", "soft-light": "Luz suave", multiply: "Multiplicação", "linear-dodge": "Subexposição linear (Adicionar)" };
+
+type TrackItemLike = {
+  getStartTime(): Promise<TickTime>;
+  createSetEndAction(t: TickTime): Action;
+  getComponentChain(): Promise<{ getComponentCount(): number; getComponentAtIndex(i: number): { getMatchName(): Promise<string>; getParamCount(): number; getParam(i: number): ComponentParam } }>;
+};
+
+async function readNumber(p: ComponentParam): Promise<number | null> {
+  try {
+    const k = (await p.getStartValue()) as unknown as { value?: unknown };
+    const v = k && typeof k === "object" && "value" in k ? (k.value as { value?: unknown } | number) : k;
+    const n = typeof v === "object" && v !== null && "value" in v ? Number(v.value) : Number(v);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Limite de cópias ao repetir um efeito (evita encher a timeline por engano). */
 const MAX_COPIES = 200;
 
@@ -199,16 +226,7 @@ export class PremiereAdapter implements HostAdapter {
         : editor.createOverwriteItemAction(item, at, opts.videoTrack, opts.audioTrack);
 
     // Duração maior que o arquivo: cópias lado a lado + corte da última no tempo exato.
-    const plan = opts.fill === undefined ? null : await this.fillPlan(sequence, item, time, opts.fill);
-    if (!plan) {
-      try {
-        this.transaction(project, () => [place(time)], `Motion Hub: inserir ${label}`);
-      } catch (e) {
-        throw mapHostError(e);
-      }
-      return { trackItems: 1, warnings: [] };
-    }
-
+    const plan = (opts.fill === undefined ? null : await this.fillPlan(sequence, item, time, opts.fill)) ?? { starts: [time], trimTo: null };
     let undoSteps = 0;
     try {
       // Uma faixa nova só existe depois da primeira inserção; as demais cópias vão para ela.
@@ -224,21 +242,77 @@ export class PremiereAdapter implements HostAdapter {
       throw mapHostError(e);
     }
 
+    // Ajustes nos clipes recém-inseridos (uma etapa de Desfazer): corte final, mesclagem, opacidade.
     const warnings: string[] = [];
+    const needsLook = (opts.blend && opts.blend !== "normal") || (opts.opacity !== undefined && opts.opacity < 100);
+    if (!plan.trimTo && !needsLook) return { trackItems: plan.starts.length, warnings, undoSteps };
+
+    const placed = [];
+    for (const start of plan.starts) {
+      const ti = await this.trackItemAt(sequence, opts.videoTrack, start);
+      if (ti) placed.push(ti);
+    }
+    if (placed.length < plan.starts.length) warnings.push("Não localizei todos os clipes inseridos; confira a mesclagem e o fim na timeline.");
+
+    const makers: Array<() => Action> = [];
+    const last = placed.find((ti) => ti.start.seconds === plan.starts[plan.starts.length - 1]!.seconds);
     if (plan.trimTo) {
-      const last = await this.trackItemAt(sequence, opts.videoTrack, plan.starts[plan.starts.length - 1]!);
-      if (!last) {
-        warnings.push("Não achei a última cópia para cortar no tempo exato; ajuste o fim manualmente.");
-      } else {
-        try {
-          this.transaction(project, () => [last.createSetEndAction(plan.trimTo!)], `Motion Hub: ajustar duração de ${label}`);
-          undoSteps++;
-        } catch (e) {
-          warnings.push(`Não foi possível cortar a última cópia: ${(e as Error).message}`);
-        }
+      if (last) makers.push(() => last.item.createSetEndAction(plan.trimTo!));
+      else warnings.push("Não achei a última cópia para cortar no tempo exato; ajuste o fim manualmente.");
+    }
+    if (needsLook) {
+      for (const ti of placed) makers.push(...(await this.lookActions(project, ti.item, opts, warnings)));
+    }
+    if (makers.length) {
+      try {
+        this.transaction(project, () => makers.map((m) => m()), `Motion Hub: ajustar ${label}`);
+        undoSteps++;
+      } catch (e) {
+        warnings.push(`Não foi possível ajustar o clipe: ${(e as Error).message}`);
       }
     }
-    return { trackItems: plan.starts.length, warnings, undoSteps };
+    return { trackItems: plan.starts.length, warnings: [...new Set(warnings)], undoSteps };
+  }
+
+  /**
+   * Ações de mesclagem/opacidade no efeito "Opacidade" do clipe. O valor do modo é o índice
+   * na lista alfabética do Premiere; antes de usar, confere se o clipe novo está em Normal (18).
+   * Se não estiver, a tabela não vale para esta versão e o modo não é alterado.
+   */
+  private async lookActions(project: Project, ti: TrackItemLike, opts: InsertOptions, warnings: string[]): Promise<Array<() => Action>> {
+    const chain = await ti.getComponentChain();
+    const comps: Array<{ getMatchName(): Promise<string>; getParamCount(): number; getParam(i: number): ComponentParam }> = [];
+    project.lockedAccess(() => {
+      for (let c = 0; c < chain.getComponentCount(); c++) comps.push(chain.getComponentAtIndex(c));
+    });
+    let comp = null;
+    for (const c of comps) if ((await c.getMatchName()) === OPACITY_MATCH) comp = c;
+    if (!comp) {
+      warnings.push("Efeito Opacidade não encontrado; aplique o modo de mesclagem manualmente.");
+      return [];
+    }
+    const params: ComponentParam[] = [];
+    project.lockedAccess(() => {
+      for (let i = 0; i < comp.getParamCount(); i++) params.push(comp.getParam(i));
+    });
+    const byName = (names: string[], fallback: number) => params.find((p) => names.includes(normalizeName(p.displayName))) ?? params[fallback];
+    const out: Array<() => Action> = [];
+
+    if (opts.opacity !== undefined && opts.opacity < 100) {
+      const op = byName(["opacity", "opacidade", "opacite", "opacidad", "deckkraft"], 0);
+      if (op) out.push(() => op.createSetValueAction(op.createKeyframe(opts.opacity!), true));
+    }
+    if (opts.blend && opts.blend !== "normal") {
+      const bm = byName(["blendmode", "mododemesclagem", "modedefusion", "mododefusion", "fullmethode"], 1);
+      const current = bm ? await readNumber(bm) : null;
+      if (!bm || current !== PREMIERE_BLEND.normal) {
+        warnings.push(`Aplique o modo de mesclagem "${BLEND_LABEL[opts.blend]}" em Controles de efeito → Opacidade (não consegui aplicar automaticamente nesta versão do Premiere).`);
+      } else {
+        const value = PREMIERE_BLEND[opts.blend];
+        out.push(() => bm.createSetValueAction(bm.createKeyframe(value), true));
+      }
+    }
+    return out;
   }
 
   /** Inícios das cópias e o ponto de corte, ou null se a duração original já basta. */
@@ -257,10 +331,12 @@ export class PremiereAdapter implements HostAdapter {
     return { starts, trimTo: covered.seconds - end.seconds > 1e-3 ? end : null };
   }
 
-  private async trackItemAt(sequence: Sequence, track: number, start: TickTime) {
+  private async trackItemAt(sequence: Sequence, track: number, start: TickTime): Promise<{ item: TrackItemLike; start: TickTime } | null> {
     const t = await sequence.getVideoTrack(track);
-    for (const it of t.getTrackItems(this.p.Constants.TrackItemType.CLIP, false)) {
-      if (Math.abs((await it.getStartTime()).seconds - start.seconds) < 1e-3) return it;
+    // A tipagem diz síncrono, mas os exemplos da Adobe usam await: funciona nos dois casos.
+    const items = (await t.getTrackItems(this.p.Constants.TrackItemType.CLIP, false)) as unknown as TrackItemLike[];
+    for (const it of items) {
+      if (Math.abs((await it.getStartTime()).seconds - start.seconds) < 1e-3) return { item: it, start };
     }
     return null;
   }

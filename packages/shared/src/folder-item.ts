@@ -7,7 +7,7 @@
  *       item.json  light-leak-quente.mp4  preview.mp4  poster.png  thumb.jpg
  */
 import { z } from "zod";
-import { ASPECT_RATIOS, ASSET_TYPES, FILE_ROLES } from "./asset.js";
+import { ASPECT_RATIOS, BLEND_MODES, ASSET_TYPES, FILE_ROLES } from "./asset.js";
 import { parameterSchema } from "./manifest.js";
 import { isSafeRelativePath } from "./paths.js";
 
@@ -29,6 +29,9 @@ export const folderItemSchema = z.object({
   thumb: fileName.optional(),
   durationSec: z.number().positive().max(36000).optional(),
   aspectRatio: z.enum(ASPECT_RATIOS).default("any"),
+  /** Mesclagem e opacidade (0–100) aplicadas ao clipe inserido. */
+  blend: z.enum(BLEND_MODES).optional(),
+  opacity: z.number().min(0).max(100).optional(),
   fps: z.number().positive().max(240).optional(),
   language: z.string().max(10).nullable().optional(),
   license: z.string().max(200).default("megalume-internal"),
@@ -39,6 +42,18 @@ export const folderItemSchema = z.object({
 });
 
 export type FolderItem = z.infer<typeof folderItemSchema>;
+
+/**
+ * Mesclagem para itens antigos sem "blend" no item.json: overlays em .mp4 não têm
+ * transparência, então precisam de Tela (luz) ou Sobrepor (grão) para não cobrir o vídeo.
+ */
+export function inferLook(it: Pick<FolderItem, "type" | "main" | "tags" | "name" | "blend" | "opacity">): { blend?: FolderItem["blend"]; opacity?: number } {
+  if (it.blend) return { blend: it.blend, opacity: it.opacity };
+  const noAlpha = /\.(mp4|m4v)$/i.test(it.main);
+  if (it.type !== "overlay" || !noAlpha) return { opacity: it.opacity };
+  const grain = [it.name, ...it.tags].some((t) => /gr[aã]o|grain/i.test(t));
+  return grain ? { blend: "overlay", opacity: it.opacity ?? 35 } : { blend: "screen", opacity: it.opacity };
+}
 
 export function roleForFile(name: string): "template" | "audio" | "media" {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";

@@ -80,7 +80,7 @@ export async function applyAsset(req: ApplyRequest, deps: ApplyDeps): Promise<Ap
     const result =
       main.role === "template"
         ? await deps.host.insertMogrt(main.local, req.options, toHostParams(item.manifest.parameters, values.values), item.name)
-        : await deps.host.insertMedia(main.local, req.options, item.name);
+        : await deps.host.insertMedia(main.local, { blend: item.manifest.blend, opacity: item.manifest.opacity, ...req.options }, item.name);
 
     op.advance("verifying");
     if (result.trackItems < 1) throw new ApplyError("host_api_error", "Nada foi inserido na sequência.");

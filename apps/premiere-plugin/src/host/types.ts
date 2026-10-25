@@ -1,5 +1,5 @@
 /** Contrato entre o painel e o aplicativo Adobe (adaptador por host, §2). */
-import type { HostName, ParameterType } from "@motionhub/shared";
+import type { BlendMode, HostName, ParameterType } from "@motionhub/shared";
 
 export interface SequenceInfo {
   name: string;
@@ -31,6 +31,9 @@ export interface InsertOptions {
    * ou até o fim da sequência ("end"). Ausente = duração original do arquivo.
    */
   fill?: number | "end";
+  /** Só para mídia: modo de mesclagem e opacidade (0–100) do clipe inserido. */
+  blend?: BlendMode;
+  opacity?: number;
 }
 
 export interface HostParamValue {

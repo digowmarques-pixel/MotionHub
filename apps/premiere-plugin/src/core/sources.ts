@@ -1,7 +1,7 @@
 /**
  * Fontes do catálogo: servidor Motion Hub (API) ou biblioteca em pasta (NAS, sem servidor).
  */
-import { parseFolderItem, roleForFile, slugify, type FileRole, type PresetManifest } from "@motionhub/shared";
+import { inferLook, parseFolderItem, roleForFile, slugify, type FileRole, type PresetManifest } from "@motionhub/shared";
 import type { FolderLibrary, Platform } from "../platform/types.js";
 import type { ApiClient } from "./api-client.js";
 import type { CatalogItem } from "./catalog.js";
@@ -130,6 +130,7 @@ export class FolderSource implements CatalogSource {
         preview: { path: it.preview ?? it.main, poster: it.poster ?? it.main },
         parameters: it.parameters,
         aspectRatio: it.aspectRatio,
+        ...inferLook(it),
         durationSec: it.durationSec,
         fps: it.fps,
         license: it.license,

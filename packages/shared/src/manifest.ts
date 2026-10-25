@@ -3,7 +3,7 @@
  * Formato PRÓPRIO da Megalume — não é compatível com formatos de terceiros.
  */
 import { z } from "zod";
-import { ASPECT_RATIOS, ASSET_TYPES, FILE_ROLES, HOSTS } from "./asset.js";
+import { ASPECT_RATIOS, BLEND_MODES, ASSET_TYPES, FILE_ROLES, HOSTS } from "./asset.js";
 import { isSemver } from "./semver.js";
 import { isSafeRelativePath } from "./paths.js";
 
@@ -98,6 +98,9 @@ export const presetManifestSchema = z
     preview: z.object({ path: relPath, poster: relPath }),
     parameters: z.array(parameterSchema).default([]),
     aspectRatio: z.enum(ASPECT_RATIOS).default("any"),
+    /** Mesclagem e opacidade (0–100) aplicadas ao clipe inserido. */
+    blend: z.enum(BLEND_MODES).optional(),
+    opacity: z.number().min(0).max(100).optional(),
     durationSec: z.number().positive().max(3600).optional(),
     fps: z.number().positive().max(240).optional(),
     language: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/).optional(),
