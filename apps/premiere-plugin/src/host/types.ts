@@ -1,5 +1,6 @@
 /** Contrato entre o painel e o aplicativo Adobe (adaptador por host, §2). */
 import type { BlendMode, HostName, ParameterType } from "@motionhub/shared";
+import type { ClipMotion } from "../core/motion/plan.js";
 
 export interface SequenceInfo {
   name: string;
@@ -51,8 +52,23 @@ export interface InsertResult {
   undoSteps?: number;
 }
 
+/** Trabalho de movimento sobre os clipes selecionados na timeline. */
+export type MotionJob =
+  | { kind: "each"; label: string; build: (clip: { duration: number; fps: number }) => ClipMotion }
+  | { kind: "pair"; label: string; a: ClipMotion; b: ClipMotion };
+
+export interface MotionResult {
+  clips: number;
+  keyframes: number;
+  warnings: string[];
+  undoSteps: number;
+  /** Diagnóstico curto (efeitos e unidades detectadas), útil para validar em Premiere real. */
+  details: string;
+}
+
 export interface HostAdapter {
   getContext(): Promise<HostContext>;
   insertMogrt(path: string, opts: InsertOptions, params: HostParamValue[], label: string): Promise<InsertResult>;
   insertMedia(path: string, opts: InsertOptions, label: string): Promise<InsertResult>;
+  applyMotion(job: MotionJob): Promise<MotionResult>;
 }

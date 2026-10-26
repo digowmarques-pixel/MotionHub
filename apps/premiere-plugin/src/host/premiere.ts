@@ -6,7 +6,8 @@
 import type { premierepro } from "@adobe/premierepro";
 import type { Project, Sequence, ProjectItem, TickTime, ComponentParam, Action } from "@adobe/premierepro";
 import { ApplyError, type BlendMode } from "@motionhub/shared";
-import type { HostAdapter, HostContext, HostParamValue, InsertOptions, InsertResult } from "./types.js";
+import type { HostAdapter, HostContext, HostParamValue, InsertOptions, InsertResult, MotionJob, MotionResult } from "./types.js";
+import { MotionApplier } from "./premiere-motion.js";
 
 type Ppro = premierepro;
 const BIN_NAME = "Megalume Motion Hub";
@@ -113,6 +114,21 @@ export class PremiereAdapter implements HostAdapter {
       }, undo);
     });
     if (!ok) throw new ApplyError("host_api_error", `O Premiere recusou a operação "${undo}".`);
+  }
+
+  private motion: MotionApplier | null = null;
+
+  async applyMotion(job: MotionJob): Promise<MotionResult> {
+    const { project, sequence } = await this.require();
+    const settings = await sequence.getSettings();
+    const rect = await settings.getVideoFrameRect();
+    const fps = settings.getVideoFrameRate().value;
+    this.motion ??= new MotionApplier(this.p);
+    try {
+      return await this.motion.apply(project, sequence, job, { width: rect.width, height: rect.height, fps });
+    } catch (e) {
+      throw mapHostError(e);
+    }
   }
 
   async insertMogrt(path: string, opts: InsertOptions, params: HostParamValue[], label: string): Promise<InsertResult> {

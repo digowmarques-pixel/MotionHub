@@ -10,6 +10,7 @@ import { applyAsset, compatibility } from "../core/apply.js";
 import { $, btn, clear, createSelect, debounce, h, isShown, setDisabled, show, type SelectControl } from "./dom.js";
 import { CATEGORY_LABELS, STATE_LABEL, TYPE_LABEL } from "./labels.js";
 import { createParamForm, type ParamForm } from "./param-form.js";
+import { MotionView } from "./motion-view.js";
 
 const PAGE = 60;
 const LAST_SERVER = "motionhub.lastServer";
@@ -35,6 +36,8 @@ export class App {
   private form: ParamForm | null = null;
   private busy = false;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private motion: MotionView | null = null;
+  private tab: "library" | "motion" = "library";
   /** Modo pasta (NAS, sem servidor) ou servidor Motion Hub. */
   private folder: FolderSource | null = null;
 
@@ -104,8 +107,21 @@ export class App {
 
   /** Alterna entre a lista e a tela de detalhe (sem sobreposição absoluta: mais seguro no UXP). */
   private showDetail(on: boolean): void {
-    for (const id of ["#browse"]) show(this.root.querySelector(id), !on);
-    show(this.root.querySelector("#detail"), on);
+    show(this.root.querySelector("#browse"), !on && this.tab === "library");
+    show(this.root.querySelector("#detail"), on && this.tab === "library");
+  }
+
+  private setTab(tab: "library" | "motion"): void {
+    this.tab = tab;
+    this.stopVideo();
+    for (const [id, t] of [["#tab-library", "library"], ["#tab-motion", "motion"]] as const) this.root.querySelector(id)?.classList.toggle("is-on", t === tab);
+    this.motion?.setVisible(tab === "motion");
+    if (tab === "motion") {
+      show(this.root.querySelector("#browse"), false);
+      show(this.root.querySelector("#detail"), false);
+    } else {
+      this.showDetail(!!this.selected);
+    }
   }
 
   // ---------- Login ----------
@@ -190,7 +206,13 @@ export class App {
     // dentro de um contêiner com rolagem encolhem até virar linhas).
     const grid = h("div", { class: "grid", id: "grid", onscroll: () => this.maybeLoadMore() }, h("div", { class: "grid-inner", id: "grid-inner" }));
 
+    this.motion = new MotionView(this.host, () => this.ctx);
+    const tabs = h("div", { class: "tabs", role: "tablist" },
+      btn({ class: "tab is-on", id: "tab-library", role: "tab", onclick: () => this.setTab("library") }, "Biblioteca"),
+      btn({ class: "tab", id: "tab-motion", role: "tab", onclick: () => this.setTab("motion") }, "Movimento"),
+    );
     this.root.append(
+      tabs,
       h("div", { class: "browse", id: "browse" },
         h("div", { class: "top" },
           search,
@@ -203,6 +225,7 @@ export class App {
         grid,
       ),
       h("div", { class: "detail is-hidden", id: "detail", "aria-label": "Detalhes do efeito" }),
+      this.motion.el,
       h("div", { class: "ctx", id: "ctx" },
         h("div", { class: "dot", id: "net" }),
         h("div", { id: "ctx-text", class: "ctx-text" }, "Lendo Premiere…"),
@@ -210,6 +233,7 @@ export class App {
       ),
     );
 
+    this.tab = "library";
     this.showDetail(false);
     document.onkeydown = (e) => {
       if (e.key === "Escape" && isShown($(this.root, "#detail"))) this.closeDetail();
@@ -247,7 +271,7 @@ export class App {
 
   private setCategory(c: Category): void {
     this.view.category = c;
-    for (const b of this.root.querySelectorAll<HTMLElement>(".chip")) {
+    for (const b of this.root.querySelectorAll<HTMLElement>("#browse .chip")) {
       b.classList.toggle("is-on", b.dataset.cat === c);
       b.setAttribute("aria-selected", String(b.dataset.cat === c));
     }
@@ -295,7 +319,7 @@ export class App {
 
   /** Esconde categorias sem nenhum item (aparecem sozinhas quando alguém adicionar conteúdo). */
   private updateChips(): void {
-    for (const b of this.root.querySelectorAll<HTMLElement>(".chip")) {
+    for (const b of this.root.querySelectorAll<HTMLElement>("#browse .chip")) {
       const c = b.dataset.cat as Category;
       if (c === "all" || c === "favourites" || c === "recent" || c === this.view.category) {
         show(b, true);

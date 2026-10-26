@@ -51,3 +51,21 @@ Overlays sem alpha (.mp4: light leak, bokeh, poeira, grão) recebem `blend`/`opa
 | Valor do "Modo de mesclagem" = índice em ordem alfabética (Normal 18, Tela 22, Sobrepor 19) | Mapeado por terceiros no Premiere 25.2 (Osiris-Premiere-MCP, MIT). **Validar no 26.x.** |
 | Trava de segurança | Antes de aplicar, o plugin lê o modo do clipe novo; se não for 18 (Normal), não altera e mostra aviso para aplicar à mão. |
 | Opacidade em 0–100 | Validar no Premiere real. |
+
+## Presets de movimento (plugin 0.4.0)
+
+A aba **Movimento** anima o próprio clipe selecionado: adiciona efeitos nativos e grava keyframes
+calculados pelo plugin (um por quadro, depois simplificados), com curvas expo/back/elastic/bounce.
+
+| Efeito | matchName | Parâmetros usados (nome PT/EN, índice de reserva) |
+|---|---|---|
+| Transformar | `AE.ADBE Geometry2` | Posição (1), Escala uniforme (2), Escala (3), Rotação (7), Opacidade (8), Usar ângulo do obturador da composição (9), Ângulo do obturador (10) |
+| Desfoque gaussiano | `AE.ADBE Gaussian Blur 2` | Intensidade (0), Repetir pixels de borda (2) |
+| Desfoque direcional | `AE.ADBE Motion Blur` | Direção (0), Comprimento (1) |
+| 3D básico | `AE.ADBE Basic 3D` | Girar (0), Inclinar (1) |
+| Deslocamento | `AE.ADBE Offset` | Deslocar centro para (0) |
+
+**Validar no Premiere real** (o painel mostra um resumo técnico abaixo do status):
+- Tempo dos keyframes = ponto de entrada do clipe (`getInPoint`) + deslocamento. Se aparecerem fora do lugar, a base de tempo é outra.
+- Posição em pixels ou 0–1: detectado lendo o valor inicial; aparece como "posição em px" ou "posição em 0–1".
+- Cada aplicação usa 2 etapas de Desfazer por clipe (adicionar efeitos; keyframes).

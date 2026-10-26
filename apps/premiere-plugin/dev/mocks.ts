@@ -1,7 +1,8 @@
 /** Implementações simuladas de plataforma e host, para navegador e testes. */
+import { keyframeCount } from "../src/core/motion/plan.js";
 import { ApplyError } from "@motionhub/shared";
 import type { FolderLibrary, PickedFile, Platform } from "../src/platform/types.js";
-import type { HostAdapter, HostContext, HostParamValue, InsertOptions, InsertResult } from "../src/host/types.js";
+import type { HostAdapter, HostContext, HostParamValue, InsertOptions, InsertResult, MotionJob, MotionResult } from "../src/host/types.js";
 
 /** Biblioteca em pasta simulada em memória (testes). */
 export class MemoryFolderLibrary implements FolderLibrary {
@@ -180,7 +181,21 @@ export class MockPremiere implements HostAdapter {
   undoStack: MockInsertion[] = [];
   playhead = 12.5;
 
+  /** Clipes selecionados na timeline simulada (duração em segundos). */
+  selectedClips: number[] = [8];
+  motions: Array<{ label: string; kind: string; keyframes: number }> = [];
+
   constructor(readonly hostVersion = "25.6.0") {}
+
+  async applyMotion(job: MotionJob): Promise<MotionResult> {
+    if (!this.hasProject) throw new ApplyError("host_no_project");
+    if (!this.hasSequence) throw new ApplyError("host_no_sequence");
+    if (!this.selectedClips.length) throw new ApplyError("unsupported", "Selecione um ou mais clipes de vídeo na timeline.");
+    const plans = job.kind === "each" ? this.selectedClips.map((d) => job.build({ duration: d, fps: 29.97 })) : [job.a, job.b];
+    const keyframes = plans.reduce((n, m) => n + keyframeCount(m), 0);
+    this.motions.push({ label: job.label, kind: job.kind, keyframes });
+    return { clips: job.kind === "each" ? this.selectedClips.length : 2, keyframes, warnings: [], undoSteps: plans.length * 2, details: "simulado" };
+  }
 
   async getContext(): Promise<HostContext> {
     return {
